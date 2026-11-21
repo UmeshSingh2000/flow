@@ -81,6 +81,7 @@ export function CanvasArea() {
 
   const view = useFlowStore((state) => state.view);
   const setView = useFlowStore((state) => state.setView);
+  const theme = useFlowStore((state) => state.theme);
   const addImage = useFlowStore((state) => state.addImage);
   const createNodeWithImages = useFlowStore((state) => state.createNodeWithImages);
 
@@ -408,7 +409,7 @@ export function CanvasArea() {
             variant={BackgroundVariant.Dots}
             gap={18}
             size={1.2}
-            color="#d4d4da"
+            color={theme === 'dark' ? '#3f3f46' : '#d4d4da'}
           />
           <Controls position="bottom-left" showInteractive={false} />
           <MiniMap
@@ -418,13 +419,13 @@ export function CanvasArea() {
             nodeColor={(node: FlowCanvasNode) => NODE_COLORS[node.data.node.type]}
             nodeStrokeWidth={0}
             nodeBorderRadius={3}
-            maskColor="rgba(244, 244, 246, 0.7)"
+            maskColor={theme === 'dark' ? 'rgba(24, 24, 27, 0.72)' : 'rgba(244, 244, 246, 0.7)'}
             style={{
               width: 140,
               height: 96,
               marginBottom: 14,
-              background: '#ffffff',
-              border: '1px solid #e4e4e7',
+              background: theme === 'dark' ? '#202024' : '#ffffff',
+              border: theme === 'dark' ? '1px solid #34343a' : '1px solid #e4e4e7',
             }}
           />
         </ReactFlow>

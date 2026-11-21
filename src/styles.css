@@ -465,7 +465,7 @@ select {
   padding-right: 6px;
   border-radius: 6px;
   font-size: 12px;
-  color: #3f3f46;
+  color: var(--text);
   white-space: nowrap;
   cursor: pointer;
   outline: none;
@@ -570,7 +570,7 @@ select {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #52525b;
+  color: var(--muted);
 }
 
 .status-dot {
@@ -644,7 +644,7 @@ select {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #3f3f46;
+  color: var(--text);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
@@ -854,7 +854,7 @@ select {
 .node-table td {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  color: #3f3f46;
+  color: var(--text);
   vertical-align: top;
 }
 
@@ -1359,7 +1359,7 @@ select {
   border: 1px solid var(--border);
   border-radius: 5px;
   background: #fff;
-  color: #475569;
+  color: var(--muted);
   font-size: 10.5px;
   font-weight: 500;
   white-space: nowrap;
@@ -1405,7 +1405,7 @@ select {
 }
 
 .react-flow__attribution a {
-  color: #c4c4c8;
+  color: var(--faint);
 }
 
 .react-flow__controls {
@@ -1420,7 +1420,7 @@ select {
   height: 26px;
   border-bottom: 1px solid var(--border);
   background: #fff;
-  color: #52525b;
+  color: var(--muted);
 }
 
 .react-flow__controls-button:last-child {
@@ -1554,7 +1554,7 @@ select {
   justify-content: space-between;
   padding: 8px 10px;
   background: var(--panel-soft);
-  color: #3f3f46;
+  color: var(--text);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1620,7 +1620,7 @@ select {
   border: 1px solid transparent;
   border-radius: 6px;
   background: var(--panel-soft);
-  color: #3f3f46;
+  color: var(--text);
   font-size: 11.5px;
 }
 
@@ -1719,7 +1719,7 @@ select {
 .meta-line {
   margin-top: auto;
   padding-top: 4px;
-  color: #b4b4bb;
+  color: var(--faint);
   font-size: 10px;
 }
 
@@ -2135,7 +2135,7 @@ select {
 }
 
 .markdown-body {
-  color: #3f3f46;
+  color: var(--text);
   font-size: 12px;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -2450,7 +2450,7 @@ select {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #3f3f46;
+  color: var(--text);
   font-size: 12px;
   text-align: left;
   cursor: pointer;
@@ -2626,4 +2626,199 @@ select {
   .properties {
     display: none;
   }
+}
+
+/* Theme switch */
+.theme-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin: 6px 0 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+
+.theme-switch button {
+  justify-content: center;
+  padding: 5px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.theme-switch button.is-active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #18181b;
+  --panel: #202024;
+  --panel-soft: #27272a;
+  --border: #34343a;
+  --border-strong: #484851;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --accent-soft: #172554;
+}
+
+:root[data-theme='dark'] .sidebar,
+:root[data-theme='dark'] .sidebar-footer,
+:root[data-theme='dark'] .canvas-header,
+:root[data-theme='dark'] .properties,
+:root[data-theme='dark'] .menu,
+:root[data-theme='dark'] .view-scroll,
+:root[data-theme='dark'] .docs-view,
+:root[data-theme='dark'] .node-card,
+:root[data-theme='dark'] .board-card,
+:root[data-theme='dark'] .edge-label,
+:root[data-theme='dark'] .edge-disconnect,
+:root[data-theme='dark'] .react-flow__controls-button,
+:root[data-theme='dark'] .dialog,
+:root[data-theme='dark'] .markdown-sheet,
+:root[data-theme='dark'] .image-viewer,
+:root[data-theme='dark'] .guide-card {
+  background: var(--panel);
+}
+
+:root[data-theme='dark'] .project-select:hover,
+:root[data-theme='dark'] .icon-btn:hover,
+:root[data-theme='dark'] .tree-row:hover,
+:root[data-theme='dark'] .menu button:hover,
+:root[data-theme='dark'] .search-clear:hover,
+:root[data-theme='dark'] .view-switch,
+:root[data-theme='dark'] .node-table th,
+:root[data-theme='dark'] .node-table tbody tr:hover td,
+:root[data-theme='dark'] .field input:disabled,
+:root[data-theme='dark'] .field select:disabled {
+  background: var(--panel-soft);
+}
+
+:root[data-theme='dark'] .btn,
+:root[data-theme='dark'] .search-box input,
+:root[data-theme='dark'] .field input,
+:root[data-theme='dark'] .field textarea,
+:root[data-theme='dark'] .field select,
+:root[data-theme='dark'] .node-delete,
+:root[data-theme='dark'] .react-flow__handle.node-handle,
+:root[data-theme='dark'] .app > .sidebar-rail-toggle {
+  background: var(--panel);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .view-switch button.is-active,
+:root[data-theme='dark'] .theme-switch button.is-active {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .tree-row,
+:root[data-theme='dark'] .menu button,
+:root[data-theme='dark'] .storage-status,
+:root[data-theme='dark'] .edge-label,
+:root[data-theme='dark'] .node-table td,
+:root[data-theme='dark'] .react-flow__controls-button {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .menu button.danger {
+  color: #f87171;
+}
+
+:root[data-theme='dark'] .menu button.danger:hover,
+:root[data-theme='dark'] .btn-danger:hover,
+:root[data-theme='dark'] .node-delete:hover,
+:root[data-theme='dark'] .edge-disconnect:hover {
+  background: #3f1818;
+}
+
+:root[data-theme='dark'] .node-card-project {
+  background: #20253a;
+  border-color: #334269;
+}
+
+:root[data-theme='dark'] .storage-warning {
+  border-color: #5b4a1d;
+  background: #322811;
+  color: #fde68a;
+}
+
+:root[data-theme='dark'] .react-flow__edge.edge-hierarchy path {
+  stroke: #52525b;
+}
+
+:root[data-theme='dark'] .react-flow__handle.node-handle {
+  border-color: #52525b;
+}
+
+:root[data-theme='dark'] .react-flow__attribution a {
+  color: var(--faint);
+}
+
+:root[data-theme='dark'] .boot {
+  background: var(--bg);
+}
+
+/* Dark-mode text and surface overrides for components with explicit light colors. */
+:root[data-theme='dark'] .sheet-head,
+:root[data-theme='dark'] .sheet-write,
+:root[data-theme='dark'] .markdown-input,
+:root[data-theme='dark'] .mode-toggle,
+:root[data-theme='dark'] .connection-menu,
+:root[data-theme='dark'] .modal,
+:root[data-theme='dark'] .modal-scrim,
+:root[data-theme='dark'] .guide-card,
+:root[data-theme='dark'] .markdown-preview,
+:root[data-theme='dark'] .docs-summary,
+:root[data-theme='dark'] .docs-entry,
+:root[data-theme='dark'] .board-card,
+:root[data-theme='dark'] .board {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .sheet-head,
+:root[data-theme='dark'] .sheet-write,
+:root[data-theme='dark'] .markdown-input,
+:root[data-theme='dark'] .mode-toggle,
+:root[data-theme='dark'] .connection-menu,
+:root[data-theme='dark'] .modal,
+:root[data-theme='dark'] .guide-card,
+:root[data-theme='dark'] .markdown-preview,
+:root[data-theme='dark'] .docs-summary {
+  background: var(--panel);
+}
+
+:root[data-theme='dark'] .mode-toggle,
+:root[data-theme='dark'] .sheet-write,
+:root[data-theme='dark'] .board,
+:root[data-theme='dark'] .node-table th {
+  background: var(--panel-soft);
+}
+
+:root[data-theme='dark'] .mode-toggle button.is-active {
+  background: var(--panel);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .docs-section summary,
+:root[data-theme='dark'] .linked-item,
+:root[data-theme='dark'] .markdown-body,
+:root[data-theme='dark'] .connection-menu button,
+:root[data-theme='dark'] .modal,
+:root[data-theme='dark'] .board-card-title,
+:root[data-theme='dark'] .table-title,
+:root[data-theme='dark'] .docs-entry-title {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .markdown-body code {
+  background: var(--panel-soft);
+}
+
+:root[data-theme='dark'] .markdown-body pre {
+  background: #18181b;
 }

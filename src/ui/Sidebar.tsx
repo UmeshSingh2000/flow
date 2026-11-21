@@ -30,6 +30,8 @@ export function Sidebar() {
   const search = useFlowStore((state) => state.search);
   const setSearch = useFlowStore((state) => state.setSearch);
   const toggleSidebar = useFlowStore((state) => state.toggleSidebar);
+  const theme = useFlowStore((state) => state.theme);
+  const setTheme = useFlowStore((state) => state.setTheme);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -245,6 +247,30 @@ export function Sidebar() {
             <>
               <div className="menu-scrim" onClick={() => setSettingsOpen(false)} />
               <div className="menu settings-menu" role="menu">
+                <div className="menu-section">
+                  <span className="eyebrow">THEME</span>
+                  <div className="theme-switch" aria-label="Theme">
+                    <button
+                      type="button"
+                      className={theme === 'light' ? 'is-active' : ''}
+                      role="menuitemradio"
+                      aria-checked={theme === 'light'}
+                      onClick={() => setTheme('light')}
+                    >
+                      Light
+                    </button>
+                    <button
+                      type="button"
+                      className={theme === 'dark' ? 'is-active' : ''}
+                      role="menuitemradio"
+                      aria-checked={theme === 'dark'}
+                      onClick={() => setTheme('dark')}
+                    >
+                      Dark
+                    </button>
+                  </div>
+                </div>
+                <hr />
                 <div className="menu-section">
                   <span className="eyebrow">GUIDED TOUR</span>
                   <p className="menu-hint">

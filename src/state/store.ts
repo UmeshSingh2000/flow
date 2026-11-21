@@ -44,6 +44,32 @@ export type Tone = 'info' | 'error';
 export type MapView = 'canvas' | 'table' | 'board' | 'docs';
 
 const VIEW_KEY = 'flow-view';
+export type Theme = 'light' | 'dark';
+const THEME_KEY = 'flow-theme';
+
+export function readTheme(): Theme {
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    /* storage unavailable */
+  }
+  if (typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
+  }
+  return 'light';
+}
+
+export function applyTheme(theme: Theme): void {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+  try {
+    window.localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 function readView(): MapView {
   try {
@@ -100,6 +126,8 @@ export interface FlowStore {
   storageKind: string;
   persistent: boolean;
   storageWarning: string | null;
+  theme: Theme;
+  setTheme(theme: Theme): void;
 
   projects: Project[];
   activeProjectId: string | null;
@@ -290,6 +318,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     storageKind: '…',
     persistent: true,
     storageWarning: null,
+    theme: readTheme(),
     projects: [],
     activeProjectId: null,
     selectedNodeId: null,
@@ -633,6 +662,11 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
 
     closeMarkdownEditor() {
       set({ markdownEditorNodeId: null });
+    },
+
+    setTheme(theme) {
+      applyTheme(theme);
+      set({ theme });
     },
 
     setView(view) {
