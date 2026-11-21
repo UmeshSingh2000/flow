@@ -1,4 +1,6 @@
 node_modules/
 dist/
+.flow-extension/
+*.vsix
 *.local
 .DS_Store

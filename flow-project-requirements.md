@@ -3,9 +3,9 @@
 **Document type:** Product Requirements / Initial Software Requirements Specification  
 **Product:** Flow  
 **Version:** 1.0 (Initial Web MVP)  
-**Status:** Draft baseline  
-**Primary release:** Offline-first web application  
-**Future platform:** Visual Studio Code extension
+**Status:** Draft baseline
+**Primary release:** Offline-first web application
+**Supported platform:** Visual Studio Code webview extension
 
 ---
 
@@ -48,7 +48,6 @@ The initial web MVP will not include:
 - Automatic source-code scanning or repository indexing.
 - Task management, sprint planning, issue tracking, or project execution tracking.
 - Billing, subscriptions, or analytics accounts.
-- A VS Code extension. The architecture should make one possible later, but it is not part of the first release.
 
 ## 5. Target users and primary use cases
 

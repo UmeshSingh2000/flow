@@ -20,6 +20,22 @@ npm run build      # typecheck + production bundle
 npm run preview    # serve the production build
 ```
 
+## VS Code extension
+
+Package and install the existing editor as a VS Code extension with one command:
+
+```bash
+npm run package
+```
+
+The command builds the webview assets, creates `flow-<version>.vsix`, and runs
+`code --install-extension ... --force`. If your VS Code executable is not named
+`code`, set `VSCODE_EXECUTABLE` before running the command.
+
+After installation, run **Flow: Open** from the VS Code Command Palette. The web
+application is built and served from separate extension files, so `npm run dev`,
+`npm run build`, and `npm run preview` continue to run normally.
+
 Flow starts empty. Create a project (or import a backup) to start mapping.
 
 ## What works
