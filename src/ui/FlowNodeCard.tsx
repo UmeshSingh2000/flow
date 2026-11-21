@@ -43,6 +43,14 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCa
       {node.description.trim().length > 0 && (
         <div className="node-description">{node.description}</div>
       )}
+      {node.images.length > 0 && (
+        <div className="node-image" aria-label={`${node.images.length} image(s)`}>
+          <img src={node.images[0].dataUrl} alt="" draggable={false} />
+          {node.images.length > 1 && (
+            <span className="node-image-count">+{node.images.length - 1}</span>
+          )}
+        </div>
+      )}
       {!isRoot && (
         <button
           type="button"

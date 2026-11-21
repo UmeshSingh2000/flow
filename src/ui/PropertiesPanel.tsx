@@ -1,8 +1,10 @@
+import { useRef } from 'react';
 import { getRootNode, isDescendant } from '../core/graph';
 import {
   CONNECTION_TYPES,
   CONNECTION_TYPE_LABELS,
   DETAIL_FIELDS,
+  MAX_IMAGES_PER_NODE,
   NODE_TYPES,
   NODE_TYPE_LABELS,
 } from '../core/types';
@@ -12,13 +14,14 @@ import type {
   NodeDetails,
   NodeType,
 } from '../core/types';
+import { filesToNodeImages } from './imageFiles';
 import {
   useActiveProject,
   useFlowStore,
   useSelectedConnection,
   useSelectedNode,
 } from '../state/store';
-import { IconCopy, IconPencil, IconPlus, IconTrash, IconX } from './icons';
+import { IconCopy, IconImage, IconPencil, IconPlus, IconTrash, IconX } from './icons';
 import { MarkdownView } from './MarkdownView';
 
 function formatDate(value: string): string {
@@ -48,6 +51,11 @@ export function PropertiesPanel() {
   const openDialog = useFlowStore((state) => state.openDialog);
   const requestFocus = useFlowStore((state) => state.requestFocus);
   const openMarkdownEditor = useFlowStore((state) => state.openMarkdownEditor);
+  const addImage = useFlowStore((state) => state.addImage);
+  const removeImage = useFlowStore((state) => state.removeImage);
+  const openImageViewer = useFlowStore((state) => state.openImageViewer);
+  const notify = useFlowStore((state) => state.notify);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   if (node && project) {
     const rootNode = getRootNode(project);
@@ -146,6 +154,76 @@ export function PropertiesPanel() {
             )}
           </section>
 
+          <section className="images-section">
+            <div className="section-title">
+              <span>Images</span>
+              <span className="count">
+                {node.images.length}/{MAX_IMAGES_PER_NODE}
+              </span>
+            </div>
+            {node.images.length > 0 && (
+              <ul className="image-grid">
+                {node.images.map((image) => (
+                  <li key={image.id} className="image-cell">
+                    <button
+                      type="button"
+                      className="image-thumb"
+                      title={`View ${image.name}`}
+                      onClick={() => openImageViewer(node.id, image.id)}
+                    >
+                      <img src={image.dataUrl} alt={image.name} />
+                    </button>
+                    <button
+                      type="button"
+                      className="image-remove"
+                      title="Remove image"
+                      aria-label={`Remove ${image.name}`}
+                      onClick={() => removeImage(node.id, image.id)}
+                    >
+                      <IconX size={10} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="btn btn-block"
+              disabled={node.images.length >= MAX_IMAGES_PER_NODE}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              <IconImage size={13} /> Add image
+            </button>
+            <p className="hint">
+              Pick files, or drop images onto the canvas — onto a node to attach them, or
+              empty space to create a node.
+            </p>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={async (event) => {
+                const files = Array.from(event.target.files ?? []);
+                if (imageInputRef.current) imageInputRef.current.value = '';
+                if (files.length === 0) return;
+                const { images, skipped } = await filesToNodeImages(files);
+                const room = MAX_IMAGES_PER_NODE - node.images.length;
+                for (const image of images.slice(0, room)) {
+                  addImage(node.id, image);
+                }
+                if (images.length > room) {
+                  notify(
+                    `A node holds at most ${MAX_IMAGES_PER_NODE} images.`,
+                    'error',
+                  );
+                }
+                if (skipped.length > 0) notify(skipped.join('. '), 'error');
+              }}
+            />
+          </section>
+
           <label className="field">
             <span>Parent node</span>
             <select
@@ -216,10 +294,10 @@ export function PropertiesPanel() {
                     link.label.trim() ||
                     (link.type ? CONNECTION_TYPE_LABELS[link.type] : '');
                   return (
-                    <li key={link.id}>
+                    <li key={link.id} className="linked-item">
                       <button
                         type="button"
-                        className="linked-item"
+                        className="linked-open"
                         onClick={() => {
                           selectConnection(link.id);
                           requestFocus(other.id);
@@ -230,6 +308,15 @@ export function PropertiesPanel() {
                         </span>
                         <span className="linked-name">{other.title}</span>
                         {label && <span className="linked-label">{label}</span>}
+                      </button>
+                      <button
+                        type="button"
+                        className="linked-remove"
+                        title="Disconnect"
+                        aria-label={`Disconnect ${node.title} from ${other.title}`}
+                        onClick={() => deleteConnection(link.id)}
+                      >
+                        <IconX size={10} />
                       </button>
                     </li>
                   );

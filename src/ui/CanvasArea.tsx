@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -10,11 +10,13 @@ import {
   useNodesInitialized,
   useReactFlow,
 } from '@xyflow/react';
-import type { Edge, NodeTypes } from '@xyflow/react';
+import type { Edge, EdgeTypes, NodeTypes } from '@xyflow/react';
 import { countLinks, NODE_CARD_WIDTH } from '../core/graph';
-import { CONNECTION_TYPE_LABELS } from '../core/types';
+import { CONNECTION_TYPE_LABELS, MAX_IMAGES_PER_NODE } from '../core/types';
 import type { NodeType } from '../core/types';
 import { useActiveProject, useFlowStore } from '../state/store';
+import { filesToNodeImages } from './imageFiles';
+import { FlowConnectionEdge } from './FlowConnectionEdge';
 import { FlowNodeCard } from './FlowNodeCard';
 import type { FlowCanvasNode } from './FlowNodeCard';
 import { IconPlus, IconUpload } from './icons';
@@ -29,6 +31,7 @@ const NODE_COLORS: Record<NodeType, string> = {
 };
 
 const nodeTypes = { flow: FlowNodeCard } as unknown as NodeTypes;
+const edgeTypes = { connection: FlowConnectionEdge } as unknown as EdgeTypes;
 
 /**
  * React Flow can only fit the graph after custom nodes have been measured.
@@ -65,9 +68,57 @@ export function CanvasArea() {
   const importBackup = useFlowStore((state) => state.importBackup);
   const notify = useFlowStore((state) => state.notify);
 
+  const addImage = useFlowStore((state) => state.addImage);
+  const createNodeWithImages = useFlowStore((state) => state.createNodeWithImages);
+
   const { setCenter, screenToFlowPosition } = useReactFlow();
   const lastFocusNonce = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepth = useRef(0);
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDropActive(false);
+    const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    if (files.length === 0) {
+      notify('Drop image files to attach them to a node.', 'error');
+      return;
+    }
+
+    // Dropping onto a node attaches there; empty canvas creates a new node.
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest('.react-flow__node');
+    const nodeId = target?.getAttribute('data-id') ?? null;
+
+    const { images, skipped } = await filesToNodeImages(files);
+    if (skipped.length > 0) notify(skipped.join('. '), 'error');
+    if (images.length === 0) return;
+
+    if (nodeId) {
+      const project = useFlowStore.getState().projects.find(
+        (candidate) => candidate.id === useFlowStore.getState().activeProjectId,
+      );
+      const node = project?.nodes.find((candidate) => candidate.id === nodeId);
+      const room = Math.max(0, MAX_IMAGES_PER_NODE - (node?.images.length ?? 0));
+      if (room === 0) {
+        notify(`A node holds at most ${MAX_IMAGES_PER_NODE} images.`, 'error');
+        return;
+      }
+      for (const image of images.slice(0, room)) addImage(nodeId, image);
+      if (images.length > room) {
+        notify(`A node holds at most ${MAX_IMAGES_PER_NODE} images.`, 'error');
+      }
+      return;
+    }
+
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    createNodeWithImages(position, images);
+  };
 
   const nodes = useMemo<FlowCanvasNode[]>(() => {
     if (!project) return [];
@@ -115,16 +166,13 @@ export function CanvasArea() {
         id: `c-${connection.id}`,
         source: connection.source,
         target: connection.target,
-        type: 'default',
+        type: 'connection',
+        data: { connectionId: connection.id },
         selectable: true,
         deletable: false,
         selected: isSelected,
         className: `edge-connection${isSelected ? ' is-selected' : ''}`,
         label: label || undefined,
-        labelStyle: { fontSize: 10.5, fill: '#475569', fontWeight: 500 },
-        labelBgStyle: { fill: '#ffffff', fillOpacity: 0.94 },
-        labelBgPadding: [5, 3],
-        labelBgBorderRadius: 4,
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 16,
@@ -219,12 +267,37 @@ export function CanvasArea() {
         </div>
       </header>
 
-      <div className="canvas-surface" data-guide="canvas">
+      <div
+        className={`canvas-surface${dropActive ? ' is-drop-target' : ''}`}
+        data-guide="canvas"
+        onDragEnter={(event) => {
+          if (!event.dataTransfer?.types.includes('Files')) return;
+          event.preventDefault();
+          dragDepth.current += 1;
+          setDropActive(true);
+        }}
+        onDragOver={(event) => {
+          if (!event.dataTransfer?.types.includes('Files')) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        }}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDropActive(false);
+        }}
+        onDrop={(event) => void handleDrop(event)}
+      >
+        {dropActive && (
+          <div className="drop-hint" aria-hidden>
+            <span>Drop onto a node to attach, or on empty canvas to create one</span>
+          </div>
+        )}
         <ReactFlow
           key={project.id}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={(changes) => {
             for (const change of changes) {
               if (change.type === 'position' && change.position) {

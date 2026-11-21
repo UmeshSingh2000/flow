@@ -7,6 +7,7 @@ import { CanvasArea } from './CanvasArea';
 import { ConnectionMenu } from './ConnectionMenu';
 import { DialogHost } from './DialogHost';
 import { Guide } from './Guide';
+import { ImageViewer } from './ImageViewer';
 import { MarkdownEditor } from './MarkdownEditor';
 import { PropertiesPanel } from './PropertiesPanel';
 import { Sidebar } from './Sidebar';
@@ -45,6 +46,10 @@ export default function App() {
       const state = useFlowStore.getState();
 
       if (event.key === 'Escape') {
+        if (state.imageViewer) {
+          state.closeImageViewer();
+          return;
+        }
         if (state.markdownEditorNodeId) {
           state.closeMarkdownEditor();
           return;
@@ -146,6 +151,7 @@ export default function App() {
       <DialogHost />
       <ConnectionMenu />
       <MarkdownEditor />
+      <ImageViewer />
       <Guide />
     </ReactFlowProvider>
   );

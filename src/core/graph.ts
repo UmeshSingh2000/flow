@@ -5,11 +5,13 @@
  */
 
 import { createId } from './id';
+import { MAX_IMAGES_PER_NODE } from './types';
 import type {
   ConnectionType,
   FlowConnection,
   FlowNode,
   NodeDetails,
+  NodeImage,
   NodeType,
   Point,
   Project,
@@ -56,6 +58,7 @@ export function createNodeRecord(input: {
     title: input.title,
     description: input.description ?? '',
     markdown: '',
+    images: [],
     details: emptyDetails(),
     position: input.position ?? { x: 0, y: 0 },
     createdAt: timestamp,
@@ -242,6 +245,7 @@ export function duplicateNode(project: Project, nodeId: string): AddChildResult 
     id: createId('n'),
     title: `${node.title} copy`,
     details: { ...node.details },
+    images: node.images.map((image) => ({ ...image, id: createId('img') })),
     position: { x: node.position.x + 28, y: node.position.y + 28 },
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -273,6 +277,54 @@ export function updateNode(
             ...node,
             ...patch,
             details: { ...node.details, ...(patch.details ?? {}) },
+            updatedAt: now(),
+          }
+        : node,
+    ),
+    updatedAt: now(),
+  };
+}
+
+/** Attaches an image unless the node already holds the maximum. */
+export function addImageToNode(
+  project: Project,
+  nodeId: string,
+  image: NodeImage,
+): ProjectResult {
+  const node = getNode(project, nodeId);
+  if (!node) return { ok: false, error: 'Node not found.' };
+  if (node.images.length >= MAX_IMAGES_PER_NODE) {
+    return {
+      ok: false,
+      error: `A node can hold at most ${MAX_IMAGES_PER_NODE} images. Remove one first.`,
+    };
+  }
+  return {
+    ok: true,
+    project: {
+      ...project,
+      nodes: project.nodes.map((candidate) =>
+        candidate.id === nodeId
+          ? { ...candidate, images: [...candidate.images, image], updatedAt: now() }
+          : candidate,
+      ),
+      updatedAt: now(),
+    },
+  };
+}
+
+export function removeImageFromNode(
+  project: Project,
+  nodeId: string,
+  imageId: string,
+): Project {
+  return {
+    ...project,
+    nodes: project.nodes.map((node) =>
+      node.id === nodeId
+        ? {
+            ...node,
+            images: node.images.filter((image) => image.id !== imageId),
             updatedAt: now(),
           }
         : node,

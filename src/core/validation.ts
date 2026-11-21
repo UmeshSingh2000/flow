@@ -6,21 +6,29 @@
  * unknown future schema versions are refused rather than silently guessed.
  */
 
-import { CONNECTION_TYPES, DETAIL_FIELDS, NODE_TYPES } from './types';
+import {
+  CONNECTION_TYPES,
+  DETAIL_FIELDS,
+  MAX_IMAGE_DATA_URL_LENGTH,
+  MAX_IMAGES_PER_NODE,
+  NODE_TYPES,
+} from './types';
 import type {
   ConnectionType,
   FlowConnection,
   FlowNode,
   NodeDetails,
+  NodeImage,
   NodeType,
   Project,
 } from './types';
 
 /**
- * v2 adds the optional `markdown` field on nodes. v1 backups still import:
- * missing markdown is normalized to an empty string rather than rejected.
+ * v2 added the optional `markdown` field and v3 the `images` array on nodes.
+ * Older backups still import: missing fields are normalized rather than
+ * rejected, so v1/v2 files keep working.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const BACKUP_FORMAT = 'flow-backup';
 
 export interface BackupFile {
@@ -59,6 +67,50 @@ function normalizeDetails(raw: unknown): NodeDetails {
     details[key] = asString(raw[key]);
   }
   return details;
+}
+
+const DATA_IMAGE_PREFIX = 'data:image/';
+
+/** Validates attached images; anything unusable is reported, never stored. */
+function normalizeImages(
+  raw: unknown,
+  label: string,
+  add: (message: string) => void,
+): NodeImage[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    add(`${label} has an invalid images list.`);
+    return [];
+  }
+  const images: NodeImage[] = [];
+  raw.forEach((entry, index) => {
+    const imageLabel = `${label}, image ${index + 1}`;
+    if (!isRecord(entry)) {
+      add(`${imageLabel} is not an object.`);
+      return;
+    }
+    const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id : '';
+    const dataUrl = typeof entry.dataUrl === 'string' ? entry.dataUrl : '';
+    if (!id) add(`${imageLabel} is missing an id.`);
+    if (!dataUrl.startsWith(DATA_IMAGE_PREFIX)) {
+      add(`${imageLabel} is not an embedded image.`);
+    } else if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+      add(`${imageLabel} is too large to import.`);
+    }
+    if (!id || !dataUrl.startsWith(DATA_IMAGE_PREFIX)) return;
+    images.push({
+      id,
+      name: asString(entry.name, 'image'),
+      dataUrl,
+      width: isFiniteNumber(entry.width) ? entry.width : 0,
+      height: isFiniteNumber(entry.height) ? entry.height : 0,
+      addedAt: asString(entry.addedAt, new Date().toISOString()),
+    });
+  });
+  if (images.length > MAX_IMAGES_PER_NODE) {
+    add(`${label} has more than ${MAX_IMAGES_PER_NODE} images.`);
+  }
+  return images;
 }
 
 function isNodeType(value: unknown): value is NodeType {
@@ -187,6 +239,7 @@ export function validateBackup(raw: unknown): BackupValidation {
           title,
           description: asString(nodeRaw.description),
           markdown: asString(nodeRaw.markdown),
+          images: normalizeImages(nodeRaw.images, nodeLabel, add),
           details: normalizeDetails(nodeRaw.details),
           position,
           createdAt: asString(nodeRaw.createdAt, new Date().toISOString()),

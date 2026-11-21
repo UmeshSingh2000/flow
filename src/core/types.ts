@@ -75,6 +75,22 @@ export interface Point {
   y: number;
 }
 
+/** An image attached to a node. Stored inline as a data URL so it travels with backups. */
+export interface NodeImage {
+  id: string;
+  name: string;
+  /** Always a `data:image/...` URL; validated on import. */
+  dataUrl: string;
+  width: number;
+  height: number;
+  addedAt: string;
+}
+
+/** Images are downscaled before storage, so a handful per node stays reasonable. */
+export const MAX_IMAGES_PER_NODE = 6;
+/** Roughly 3 MB of binary data; larger payloads are rejected on import. */
+export const MAX_IMAGE_DATA_URL_LENGTH = 4_000_000;
+
 export interface FlowNode {
   id: string;
   projectId: string;
@@ -85,6 +101,7 @@ export interface FlowNode {
   description: string;
   /** Free-form Markdown documentation, rendered read-only in the properties panel. */
   markdown: string;
+  images: NodeImage[];
   details: NodeDetails;
   position: Point;
   createdAt: string;

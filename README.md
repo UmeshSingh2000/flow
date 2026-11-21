@@ -31,7 +31,8 @@ Flow starts empty. Create a project (or import a backup) to start mapping.
 | Hierarchy | Parent–child nesting to any depth, tree with expand/collapse, re-parent via the properties panel, self/descendant cycle prevention |
 | Node documentation | Eight structured fields (purpose, inputs, outputs, preconditions, behavior, success/failure result, notes) plus description; a dot on the card marks nodes with docs |
 | Markdown | Per-node Markdown with a rendered preview in the properties panel and a full-screen editor that rises from the bottom; a Write/Preview toggle switches between the editor and the sanitized render, and Escape closes it |
-| Connections | Drag a handle to connect any two nodes, including across branches; release a connector on empty canvas to pick a node type, creating a connected node at that spot; optional label and relationship type; select + delete; duplicate and self connections are rejected |
+| Images | Attach up to six images per node by picking files in the panel or dropping them on the canvas — onto a node to attach there, onto empty space to create a node named after the file; node cards show a thumbnail, clicking one opens a full-screen lightbox |
+| Connections | Drag a handle to connect any two nodes, including across branches; release a connector on empty canvas to pick a node type, creating a connected node at that spot; optional label and relationship type; disconnect by hovering the line for its × button, from the node's *Connected nodes* list, or by selecting the edge and deleting it; duplicate and self connections are rejected |
 | Canvas | Pan, zoom, fit-to-view, minimap, dotted grid, click to select, tree selection locates and centres the node |
 | Search | Filters the project tree by title/description while keeping matching ancestors |
 | Layout | Left sidebar collapses from the brand header and reopens from an edge button; the properties panel appears only while something is selected, so the canvas reclaims both areas |
@@ -61,7 +62,12 @@ three small pieces:
 
 Steps are: welcome → create project → add node → nest a child → document the node →
 write Markdown → connect two nodes → move around the canvas → backups → done.
-`Skip tour` exits at any point, and **Take the tour** in the sidebar footer replays it.
+`Skip tour` exits at any point.
+
+The tour auto-starts only when the workspace is empty and it has never been finished.
+It can be started at any time from **Settings** in the bottom-left of the sidebar, which
+shows whether the tour was completed and offers *Start*/*Replay the tour*. Settings also
+holds backup import and workspace export.
 
 ## Architecture
 
@@ -127,9 +133,15 @@ Backups are JSON so they are portable between the web app and any future host:
 }
 ```
 
-Schema version 2 added the optional node `markdown` field. Version 1 backups still
-import: a missing markdown value is normalized to an empty string, and projects
-loaded from an older IndexedDB database are upgraded the same way on load.
+Schema version 2 added the optional node `markdown` field and version 3 the node
+`images` array. Older backups still import: missing fields are normalized (empty
+string / empty array) rather than rejected, and projects loaded from an older
+IndexedDB database are upgraded the same way on load.
+
+Images are stored inline as `data:image/...` URLs so they travel with a backup. To
+keep that affordable they are downscaled to a 1400px longest edge and re-encoded as
+WebP (JPEG fallback) on intake; small animated GIFs pass through untouched, source
+files over 12 MB are refused, and imports reject payloads above ~3 MB per image.
 
 Import rejects invalid JSON, unknown formats, future schema versions, missing nodes,
 broken parent references, hierarchy cycles, duplicate ids, self-connections, and

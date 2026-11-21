@@ -985,6 +985,61 @@ select {
   font-family: inherit;
 }
 
+/* Midpoint tools on graph connections: label plus a disconnect button. */
+.edge-tools {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: all;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.edge-tools.is-visible {
+  opacity: 1;
+}
+
+.edge-label {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.edge-disconnect {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.edge-disconnect:hover {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: var(--danger);
+}
+
+.edge-disconnect:focus-visible {
+  outline: 2px solid rgba(185, 28, 28, 0.35);
+  outline-offset: 1px;
+}
+
 .react-flow__connection-path {
   stroke: var(--accent);
   stroke-width: 1.6;
@@ -1205,22 +1260,68 @@ select {
 .linked-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   width: 100%;
-  padding: 5px 7px;
+  padding-right: 3px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: var(--panel-soft);
   color: #3f3f46;
   font-size: 11.5px;
-  text-align: left;
-  cursor: pointer;
 }
 
 .linked-item:hover {
   border-color: #dbeafe;
   background: var(--accent-soft);
+}
+
+.linked-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 4px 5px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.linked-item:hover .linked-open {
   color: var(--accent-strong);
+}
+
+.linked-remove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.linked-item:hover .linked-remove,
+.linked-remove:focus-visible {
+  opacity: 1;
+}
+
+.linked-remove:hover {
+  background: #fee2e2;
+  color: var(--danger);
 }
 
 .linked-arrow {
@@ -1285,6 +1386,206 @@ select {
   flex: 1;
 }
 
+
+/* ---------------------------------------------------------------- images */
+
+.images-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.image-cell {
+  position: relative;
+}
+
+.image-thumb {
+  display: block;
+  width: 100%;
+  height: 62px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  cursor: zoom-in;
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-thumb:hover {
+  border-color: var(--accent);
+}
+
+.image-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.image-cell:hover .image-remove,
+.image-remove:focus-visible {
+  opacity: 1;
+}
+
+.image-remove:hover {
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
+/* Thumbnail on the canvas node card. */
+.node-image {
+  position: relative;
+  margin-top: 7px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+}
+
+.node-image img {
+  display: block;
+  width: 100%;
+  height: 68px;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.node-image-count {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(24, 24, 27, 0.72);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+/* Canvas drop target state. */
+.canvas-surface.is-drop-target::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  z-index: 12;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.05);
+  pointer-events: none;
+}
+
+.drop-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 13;
+  padding: 7px 12px;
+  transform: translateX(-50%);
+  border-radius: 7px;
+  background: rgba(24, 24, 27, 0.85);
+  color: #fff;
+  font-size: 11.5px;
+  pointer-events: none;
+}
+
+/* Lightbox */
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  padding: 40px;
+}
+
+.image-viewer-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(24, 24, 27, 0.72);
+}
+
+.image-viewer-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(1000px, 100%);
+  max-height: 100%;
+  margin: 0;
+}
+
+.image-viewer-frame img {
+  max-width: 100%;
+  max-height: calc(100vh - 150px);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.image-viewer-frame figcaption {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: #e4e4e7;
+  font-size: 12px;
+}
+
+.image-viewer-name {
+  font-weight: 600;
+  color: #fff;
+}
+
+.image-viewer-meta {
+  color: #a1a1aa;
+}
+
+.image-viewer-close {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+
+.image-viewer-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
 
 /* ---------------------------------------------------------------- guided tour */
 

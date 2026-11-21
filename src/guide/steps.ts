@@ -69,7 +69,10 @@ export const GUIDE_STEPS: GuideStep[] = [
     id: 'edit-details',
     title: 'Document the node',
     body: 'Rename the node, pick its type, and add a one-line description. Longer notes belong in the Markdown section just below.',
-    tips: ['A node type only changes its appearance — it never restricts connections.'],
+    tips: [
+      'A node type only changes its appearance — it never restricts connections.',
+      'Attach images from the panel, or drop image files onto the canvas.',
+    ],
     targets: ['node-details'],
     requirement: 'node-edited',
   },
@@ -85,7 +88,10 @@ export const GUIDE_STEPS: GuideStep[] = [
     id: 'connect',
     title: 'Connect two nodes',
     body: 'Drag from the right handle of one node onto the left handle of another. Connections are independent of hierarchy and can cross branches.',
-    tips: ['Dropping a connector on empty canvas creates a connected node in one move.'],
+    tips: [
+      'Dropping a connector on empty canvas creates a connected node in one move.',
+      'To disconnect later, hover the line and press its × — or use the × next to the entry in the node’s Connected nodes list.',
+    ],
     targets: ['canvas'],
     requirement: 'connection-created',
   },

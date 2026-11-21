@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import {
   addChildNode,
+  addImageToNode as addImageToNodeInProject,
   createConnection,
   createNodeRecord,
   createProject as buildProject,
+  defaultChildType,
   defaultNodeTitle,
+  removeImageFromNode as removeImageFromNodeInProject,
   deleteConnection as removeConnection,
   deleteNode as removeNode,
   duplicateNode as duplicateNodeInProject,
@@ -24,6 +27,7 @@ import type {
   FlowConnection,
   FlowNode,
   NodeDetails,
+  NodeImage,
   NodeType,
   Point,
   Project,
@@ -87,6 +91,8 @@ export interface FlowStore {
   connectionMenu: ConnectionMenuState | null;
   /** Node whose Markdown editor sheet is open, if any. */
   markdownEditorNodeId: string | null;
+  /** Image opened in the lightbox, if any. */
+  imageViewer: { nodeId: string; imageId: string } | null;
 
   init(): Promise<void>;
 
@@ -128,6 +134,14 @@ export interface FlowStore {
 
   openMarkdownEditor(nodeId: string): void;
   closeMarkdownEditor(): void;
+
+  /** Attaches one image to a node, respecting the per-node limit. */
+  addImage(nodeId: string, image: NodeImage): void;
+  removeImage(nodeId: string, imageId: string): void;
+  /** Creates a node at a canvas position holding the given images. */
+  createNodeWithImages(position: Point, images: NodeImage[]): string | null;
+  openImageViewer(nodeId: string, imageId: string): void;
+  closeImageViewer(): void;
 
   exportBackup(scope: 'project' | 'workspace'): void;
   importBackup(
@@ -260,6 +274,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     dialog: null,
     connectionMenu: null,
     markdownEditorNodeId: null,
+    imageViewer: null,
     sidebarOpen: true,
 
     async init() {
@@ -292,6 +307,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
             nodes: project.nodes.map((node) => ({
               ...node,
               markdown: node.markdown ?? '',
+              images: node.images ?? [],
             })),
           }));
         activeProjectId = projects.some((project) => project.id === stored.activeProjectId)
@@ -466,6 +482,10 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
             result.removedIds.includes(state.markdownEditorNodeId)
               ? null
               : state.markdownEditorNodeId,
+          imageViewer:
+            state.imageViewer && result.removedIds.includes(state.imageViewer.nodeId)
+              ? null
+              : state.imageViewer,
           selectedNodeId:
             state.selectedNodeId && result.removedIds.includes(state.selectedNodeId)
               ? null
@@ -584,6 +604,64 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
 
     closeMarkdownEditor() {
       set({ markdownEditorNodeId: null });
+    },
+
+    addImage(nodeId, image) {
+      const project = active();
+      if (!project) return;
+      const result = addImageToNodeInProject(project, nodeId, image);
+      if (!result.ok) {
+        showToast(result.error, 'error');
+        return;
+      }
+      apply(result.project);
+      showToast(`Added ${image.name}.`);
+    },
+
+    removeImage(nodeId, imageId) {
+      const project = active();
+      if (!project) return;
+      apply(removeImageFromNodeInProject(project, nodeId, imageId));
+      set((state) => ({
+        imageViewer: state.imageViewer?.imageId === imageId ? null : state.imageViewer,
+      }));
+    },
+
+    createNodeWithImages(position, images) {
+      const project = active();
+      if (!project) {
+        showToast('Create a project first.', 'error');
+        return null;
+      }
+      const root = getRootNode(project);
+      const first = images[0];
+      const node = createNodeRecord({
+        projectId: project.id,
+        parentId: root?.id ?? null,
+        type: root ? defaultChildType(root.type) : 'feature',
+        title: first ? first.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 60) : 'Image',
+        position: { x: position.x - NODE_CARD_WIDTH / 2, y: position.y - 60 },
+      });
+      node.images = images;
+      apply({ ...project, nodes: [...project.nodes, node], updatedAt: now() });
+      if (root) expand([root.id]);
+      set({
+        selectedNodeId: node.id,
+        selectedConnectionId: null,
+        focusRequest: { nodeId: node.id, nonce: ++focusCounter },
+      });
+      showToast(
+        `Created “${node.title}” with ${images.length} image${images.length === 1 ? '' : 's'}.`,
+      );
+      return node.id;
+    },
+
+    openImageViewer(nodeId, imageId) {
+      set({ imageViewer: { nodeId, imageId } });
+    },
+
+    closeImageViewer() {
+      set({ imageViewer: null });
     },
 
     createNodeFromConnection(type) {

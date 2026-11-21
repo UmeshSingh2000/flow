@@ -103,6 +103,16 @@ export function IconHelp(props: IconProps) {
   );
 }
 
+export function IconImage(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <rect x="2.5" y="3.5" width="11" height="9" rx="1.6" />
+      <circle cx="6" cy="6.6" r="1.1" />
+      <path d="M3.2 11.2l3-3 2.3 2.3 1.9-1.9 2.4 2.4" />
+    </svg>
+  );
+}
+
 export function IconSettings(props: IconProps) {
   return (
     <svg {...iconProps(props)}>
