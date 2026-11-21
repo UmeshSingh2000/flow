@@ -55,6 +55,7 @@ export function createNodeRecord(input: {
     type: input.type,
     title: input.title,
     description: input.description ?? '',
+    markdown: '',
     details: emptyDetails(),
     position: input.position ?? { x: 0, y: 0 },
     createdAt: timestamp,
@@ -145,6 +146,24 @@ export function wouldCreateCycle(
   return isDescendant(project, nodeId, newParentId);
 }
 
+/** Sensible untitled names per node type. */
+export function defaultNodeTitle(type: NodeType): string {
+  switch (type) {
+    case 'project':
+      return 'New project';
+    case 'module':
+      return 'New module';
+    case 'feature':
+      return 'New feature';
+    case 'sub-feature':
+      return 'New sub-feature';
+    case 'process':
+      return 'New process';
+    case 'decision':
+      return 'New decision';
+  }
+}
+
 export function defaultChildType(parentType: NodeType): NodeType {
   switch (parentType) {
     case 'project':
@@ -199,7 +218,7 @@ export function addChildNode(
     projectId: project.id,
     parentId: parent.id,
     type,
-    title: options.title ?? 'New node',
+    title: options.title ?? defaultNodeTitle(type),
     description: options.description ?? '',
     position: nextChildPosition(project, parent),
   });

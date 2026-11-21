@@ -18,7 +18,8 @@ import {
   useSelectedConnection,
   useSelectedNode,
 } from '../state/store';
-import { IconCopy, IconPlus, IconTrash, IconX } from './icons';
+import { IconCopy, IconPencil, IconPlus, IconTrash, IconX } from './icons';
+import { MarkdownView } from './MarkdownView';
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -46,6 +47,7 @@ export function PropertiesPanel() {
   const addNode = useFlowStore((state) => state.addNode);
   const openDialog = useFlowStore((state) => state.openDialog);
   const requestFocus = useFlowStore((state) => state.requestFocus);
+  const openMarkdownEditor = useFlowStore((state) => state.openMarkdownEditor);
 
   if (node && project) {
     const rootNode = getRootNode(project);
@@ -82,6 +84,7 @@ export function PropertiesPanel() {
           <label className="field">
             <span>Name</span>
             <input
+              data-guide="node-details"
               value={node.title}
               onChange={(event) => updateNode(node.id, { title: event.target.value })}
               placeholder="Node name"
@@ -115,6 +118,33 @@ export function PropertiesPanel() {
               placeholder="One line about what this covers"
             />
           </label>
+
+          <section className="markdown-section">
+            <div className="section-title">
+              <span>Markdown</span>
+              <button
+                type="button"
+                className="markdown-edit-btn"
+                data-guide="markdown"
+                onClick={() => openMarkdownEditor(node.id)}
+              >
+                <IconPencil size={11} /> {node.markdown?.trim() ? 'Edit' : 'Write'}
+              </button>
+            </div>
+            {node.markdown?.trim() ? (
+              <div className="markdown-preview">
+                <MarkdownView markdown={node.markdown} />
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="markdown-empty"
+                onClick={() => openMarkdownEditor(node.id)}
+              >
+                Add Markdown documentation for this node…
+              </button>
+            )}
+          </section>
 
           <label className="field">
             <span>Parent node</span>
@@ -215,6 +245,7 @@ export function PropertiesPanel() {
           <button
             type="button"
             className="btn btn-block"
+            data-guide="add-child"
             onClick={() => addNode(node.id)}
           >
             <IconPlus size={14} /> Add child node
@@ -327,18 +358,6 @@ export function PropertiesPanel() {
     );
   }
 
-  return (
-    <aside className="properties is-empty" aria-label="Node details">
-      <div className="empty-hint">
-        <div className="empty-icon" aria-hidden>
-          ◇
-        </div>
-        <h2>Nothing selected</h2>
-        <p>
-          Select a node on the canvas or in the project tree to edit its details, or drag
-          from a node handle to connect two nodes.
-        </p>
-      </div>
-    </aside>
-  );
+  // Collapsed when nothing is selected: the canvas uses the space instead.
+  return null;
 }

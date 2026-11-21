@@ -1,16 +1,29 @@
 import { useEffect } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { getRootNode } from '../core/graph';
+import { useGuideStore } from '../state/guideStore';
 import { flushStorage, useFlowStore } from '../state/store';
 import { CanvasArea } from './CanvasArea';
+import { ConnectionMenu } from './ConnectionMenu';
 import { DialogHost } from './DialogHost';
+import { Guide } from './Guide';
+import { MarkdownEditor } from './MarkdownEditor';
 import { PropertiesPanel } from './PropertiesPanel';
 import { Sidebar } from './Sidebar';
 import { Toasts } from './Toasts';
+import { IconPanelLeft } from './icons';
 
 export default function App() {
   const init = useFlowStore((state) => state.init);
   const status = useFlowStore((state) => state.status);
+  const sidebarOpen = useFlowStore((state) => state.sidebarOpen);
+  const toggleSidebar = useFlowStore((state) => state.toggleSidebar);
+  const hasSelection = useFlowStore(
+    (state) =>
+      state.selectedNodeId !== null ||
+      state.selectedConnectionId !== null,
+  );
+  const guideActive = useGuideStore((state) => state.status === 'active');
 
   useEffect(() => {
     void init();
@@ -26,16 +39,24 @@ export default function App() {
         return;
       }
 
+      // While the tour is running, only the highlighted control may be used.
+      if (useGuideStore.getState().status === 'active') return;
+
       const state = useFlowStore.getState();
 
       if (event.key === 'Escape') {
+        if (state.markdownEditorNodeId) {
+          state.closeMarkdownEditor();
+          return;
+        }
         state.closeDialog();
+        state.closeConnectionMenu();
         state.selectNode(null);
         return;
       }
 
       if (event.key !== 'Delete' && event.key !== 'Backspace') return;
-      if (state.dialog) return;
+      if (state.dialog || state.connectionMenu) return;
 
       if (state.selectedConnectionId) {
         event.preventDefault();
@@ -95,13 +116,37 @@ export default function App() {
 
   return (
     <ReactFlowProvider>
-      <div className="app">
+      <div
+        className={[
+          'app',
+          sidebarOpen ? '' : 'is-sidebar-collapsed',
+          hasSelection ? '' : 'is-no-properties',
+          guideActive ? 'guide-active' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         <Sidebar />
         <CanvasArea />
         <PropertiesPanel />
+        {!sidebarOpen && (
+          <button
+            type="button"
+            className="sidebar-rail-toggle"
+            title="Open sidebar"
+            aria-label="Open sidebar"
+            aria-pressed="false"
+            onClick={toggleSidebar}
+          >
+            <IconPanelLeft size={15} />
+          </button>
+        )}
       </div>
       <Toasts />
       <DialogHost />
+      <ConnectionMenu />
+      <MarkdownEditor />
+      <Guide />
     </ReactFlowProvider>
   );
 }

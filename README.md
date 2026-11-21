@@ -20,26 +20,48 @@ npm run build      # typecheck + production bundle
 npm run preview    # serve the production build
 ```
 
-On first launch Flow seeds a demo project (“Product architecture”) so the canvas is
-not empty. To start from scratch, delete the project from the project menu.
+Flow starts empty. Create a project (or import a backup) to start mapping.
 
 ## What works
 
 | Area | Implemented |
 |---|---|
 | Projects | Create, rename (with description), switch, delete with confirmation; each project has a protected root node |
-| Nodes | Create at root or as a child, edit title/type/description, drag on canvas, duplicate, delete with descendant-aware confirmation |
+| Nodes | Create at root or as a child, edit title/type/description, drag on canvas, duplicate, delete from the card (hover/selection) or the properties panel with descendant-aware confirmation |
 | Hierarchy | Parent–child nesting to any depth, tree with expand/collapse, re-parent via the properties panel, self/descendant cycle prevention |
 | Node documentation | Eight structured fields (purpose, inputs, outputs, preconditions, behavior, success/failure result, notes) plus description; a dot on the card marks nodes with docs |
-| Connections | Drag a handle to connect any two nodes, including across branches; optional label and relationship type; select + delete; duplicate and self connections are rejected |
+| Markdown | Per-node Markdown with a rendered preview in the properties panel and a full-screen editor that rises from the bottom; a Write/Preview toggle switches between the editor and the sanitized render, and Escape closes it |
+| Connections | Drag a handle to connect any two nodes, including across branches; release a connector on empty canvas to pick a node type, creating a connected node at that spot; optional label and relationship type; select + delete; duplicate and self connections are rejected |
 | Canvas | Pan, zoom, fit-to-view, minimap, dotted grid, click to select, tree selection locates and centres the node |
 | Search | Filters the project tree by title/description while keeping matching ancestors |
+| Layout | Left sidebar collapses from the brand header and reopens from an edge button; the properties panel appears only while something is selected, so the canvas reclaims both areas |
 | Persistence | Autosave (400 ms debounce) to IndexedDB, save-state indicator, security-net in-memory fallback with a visible warning |
 | Portability | Versioned JSON backup export (single project or whole workspace) and validated import that never overwrites an existing project |
 | Offline | No network requests after load; all editing works disconnected |
+| Guided tour | A blocking first-run tour that walks a new user from creating a project through nodes, nesting, documentation, Markdown, connections, canvas navigation and backups; restartable from the sidebar |
 
 Keyboard: `Delete`/`Backspace` deletes the selected connection, or asks to confirm
 deletion of the selected node; `Escape` clears selection and closes dialogs.
+
+### Guided tour
+
+New users get a blocking tour the first time the workspace is empty. It is built from
+three small pieces:
+
+- `src/guide/steps.ts` — pure step data (title, text, tips, `data-guide` targets and the
+  action each step requires). Helpers such as `projectMaxDepth` and `nodesSignature`
+  read a plain `Project`, so the tour logic is testable without a browser.
+- `src/state/guideStore.ts` — the step machine: `start`, `next`, `finish`, and
+  `evaluate`, which advances a step once its requirement is met. It also decides when to
+  auto-start and remembers completion in `localStorage`.
+- `src/ui/Guide.tsx` — the overlay: four blockers leave a hole over the highlighted
+  control, so the guided action is the only thing that can be clicked while the tour
+  runs. Keyboard shortcuts are suspended too, except inside the dialogs the tour itself
+  opens. Explanatory steps use a Next button; action steps advance by themselves.
+
+Steps are: welcome → create project → add node → nest a child → document the node →
+write Markdown → connect two nodes → move around the canvas → backups → done.
+`Skip tour` exits at any point, and **Take the tour** in the sidebar footer replays it.
 
 ## Architecture
 
@@ -49,7 +71,6 @@ src/
     types.ts       node/connection/project model
     graph.ts       pure operations: add, move, re-parent, connect, delete, duplicate
     validation.ts  backup parsing, schema versioning, reference + cycle checks
-    seed.ts        first-run demo project
     id.ts          stable id generation
   storage/         the persistence boundary (FR-DATA-09 / ARCH-02)
     repository.ts  StorageAdapter interface
@@ -74,13 +95,13 @@ Backups are JSON so they are portable between the web app and any future host:
 ```json
 {
   "format": "flow-backup",
-  "version": 1,
+  "version": 2,
   "exportedAt": "2026-11-21T08:00:00.000Z",
   "projects": [
     {
       "id": "p_…",
-      "name": "Product architecture",
-      "description": "A map of how it all fits",
+      "name": "Example project",
+      "description": "An example of a project map",
       "createdAt": "…",
       "updatedAt": "…",
       "nodes": [
@@ -89,8 +110,9 @@ Backups are JSON so they are portable between the web app and any future host:
           "projectId": "p_…",
           "parentId": null,
           "type": "project",
-          "title": "Flow",
-          "description": "Offline-first project workspace",
+          "title": "Example project",
+          "description": "A project root node",
+          "markdown": "# Overview\n\nFree-form **Markdown** documentation.",
           "details": { "purpose": "", "inputs": "", "outputs": "", "preconditions": "", "behavior": "", "successResult": "", "failureResult": "", "notes": "" },
           "position": { "x": 0, "y": 330 },
           "createdAt": "…",
@@ -104,6 +126,10 @@ Backups are JSON so they are portable between the web app and any future host:
   ]
 }
 ```
+
+Schema version 2 added the optional node `markdown` field. Version 1 backups still
+import: a missing markdown value is normalized to an empty string, and projects
+loaded from an older IndexedDB database are upgraded the same way on load.
 
 Import rejects invalid JSON, unknown formats, future schema versions, missing nodes,
 broken parent references, hierarchy cycles, duplicate ids, self-connections, and

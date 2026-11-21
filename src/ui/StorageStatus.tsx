@@ -12,7 +12,7 @@ export function StorageStatus() {
   const persistent = useFlowStore((state) => state.persistent);
 
   return (
-    <div className="storage-block">
+    <div className="storage-block" data-guide="storage">
       <div className={`storage-status is-${saveState}`} role="status" aria-live="polite">
         <span className="status-dot" aria-hidden />
         <span>{LABELS[saveState]}</span>

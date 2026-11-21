@@ -16,7 +16,11 @@ import type {
   Project,
 } from './types';
 
-export const SCHEMA_VERSION = 1;
+/**
+ * v2 adds the optional `markdown` field on nodes. v1 backups still import:
+ * missing markdown is normalized to an empty string rather than rejected.
+ */
+export const SCHEMA_VERSION = 2;
 export const BACKUP_FORMAT = 'flow-backup';
 
 export interface BackupFile {
@@ -182,6 +186,7 @@ export function validateBackup(raw: unknown): BackupValidation {
           type,
           title,
           description: asString(nodeRaw.description),
+          markdown: asString(nodeRaw.markdown),
           details: normalizeDetails(nodeRaw.details),
           position,
           createdAt: asString(nodeRaw.createdAt, new Date().toISOString()),

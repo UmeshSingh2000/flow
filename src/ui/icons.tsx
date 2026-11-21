@@ -93,6 +93,34 @@ export function IconDownload(props: IconProps) {
   );
 }
 
+export function IconHelp(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.3" />
+      <circle cx="8" cy="11.4" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconSettings(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <circle cx="8" cy="8" r="2.2" />
+      <path d="M8 1.9v1.5M8 12.6v1.5M1.9 8h1.5M12.6 8h1.5M3.7 3.7l1 1M11.3 11.3l1 1M12.3 3.7l-1 1M4.7 11.3l-1 1" />
+    </svg>
+  );
+}
+
+export function IconPanelLeft(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <rect x="2.5" y="3" width="11" height="10" rx="1.6" />
+      <path d="M6.5 3v10" />
+    </svg>
+  );
+}
+
 export function IconUpload(props: IconProps) {
   return (
     <svg {...iconProps(props)}>

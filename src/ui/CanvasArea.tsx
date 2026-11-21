@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import {
   Background,
   BackgroundVariant,
+  ConnectionLineType,
   Controls,
   MarkerType,
   MiniMap,
@@ -57,13 +58,14 @@ export function CanvasArea() {
   const selectNode = useFlowStore((state) => state.selectNode);
   const selectConnection = useFlowStore((state) => state.selectConnection);
   const connect = useFlowStore((state) => state.connect);
+  const openConnectionMenu = useFlowStore((state) => state.openConnectionMenu);
   const previewNodePosition = useFlowStore((state) => state.previewNodePosition);
   const commitNodePosition = useFlowStore((state) => state.commitNodePosition);
   const openDialog = useFlowStore((state) => state.openDialog);
   const importBackup = useFlowStore((state) => state.importBackup);
   const notify = useFlowStore((state) => state.notify);
 
-  const { setCenter } = useReactFlow();
+  const { setCenter, screenToFlowPosition } = useReactFlow();
   const lastFocusNonce = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,7 +91,7 @@ export function CanvasArea() {
         id: `h-${node.id}`,
         source: node.parentId,
         target: node.id,
-        type: 'smoothstep',
+        type: 'default',
         selectable: false,
         deletable: false,
         focusable: false,
@@ -113,7 +115,7 @@ export function CanvasArea() {
         id: `c-${connection.id}`,
         source: connection.source,
         target: connection.target,
-        type: 'smoothstep',
+        type: 'default',
         selectable: true,
         deletable: false,
         selected: isSelected,
@@ -172,6 +174,7 @@ export function CanvasArea() {
             <button
               type="button"
               className="btn btn-primary"
+              data-guide="new-project-canvas"
               onClick={() => openDialog({ kind: 'new-project' })}
             >
               <IconPlus size={14} /> New project
@@ -210,11 +213,13 @@ export function CanvasArea() {
           <span className="dot-sep" aria-hidden>
             ·
           </span>
-          <span>{countLinks(project)} links</span>
+          <span>
+            {countLinks(project)} link{countLinks(project) === 1 ? '' : 's'}
+          </span>
         </div>
       </header>
 
-      <div className="canvas-surface">
+      <div className="canvas-surface" data-guide="canvas">
         <ReactFlow
           key={project.id}
           nodes={nodes}
@@ -256,12 +261,38 @@ export function CanvasArea() {
             if (!connection.source || !connection.target) return;
             connect(connection.source, connection.target);
           }}
+          onConnectEnd={(event, connectionState) => {
+            // Released on empty canvas: offer to create a connected node there.
+            if (!connectionState.fromNode || connectionState.toNode) return;
+            const handleType = connectionState.fromHandle?.type;
+            if (handleType !== 'source' && handleType !== 'target') return;
+            const client =
+              'clientX' in event
+                ? { x: event.clientX, y: event.clientY }
+                : event.changedTouches.length > 0
+                  ? {
+                      x: event.changedTouches[0].clientX,
+                      y: event.changedTouches[0].clientY,
+                    }
+                  : null;
+            if (!client) return;
+            const flow = screenToFlowPosition(client);
+            openConnectionMenu({
+              sourceId: connectionState.fromNode.id,
+              handleType,
+              screenX: client.x,
+              screenY: client.y,
+              flowX: flow.x,
+              flowY: flow.y,
+            });
+          }}
           fitView
           fitViewOptions={{ padding: 32, maxZoom: 1, minZoom: 0.25 }}
           minZoom={0.25}
           maxZoom={1.75}
           deleteKeyCode={null}
-          defaultEdgeOptions={{ type: 'smoothstep' }}
+          defaultEdgeOptions={{ type: 'default' }}
+          connectionLineType={ConnectionLineType.Bezier}
           connectionLineStyle={{ stroke: '#2563eb', strokeWidth: 1.6 }}
           className="flow-canvas"
         >

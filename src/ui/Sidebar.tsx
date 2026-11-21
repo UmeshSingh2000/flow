@@ -1,13 +1,17 @@
 import { useRef, useState } from 'react';
+import { useGuideStore } from '../state/guideStore';
 import { useActiveProject, useFlowStore } from '../state/store';
 import { ProjectTree } from './ProjectTree';
 import { StorageStatus } from './StorageStatus';
 import {
   IconDownload,
+  IconHelp,
   IconMore,
+  IconPanelLeft,
   IconPencil,
   IconPlus,
   IconSearch,
+  IconSettings,
   IconTrash,
   IconUpload,
   IconX,
@@ -25,9 +29,12 @@ export function Sidebar() {
   const notify = useFlowStore((state) => state.notify);
   const search = useFlowStore((state) => state.search);
   const setSearch = useFlowStore((state) => state.setSearch);
+  const toggleSidebar = useFlowStore((state) => state.toggleSidebar);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const tourCompleted = useGuideStore((state) => state.completed);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -51,6 +58,16 @@ export function Sidebar() {
           <div className="brand-name">Flow</div>
           <div className="brand-tag">Offline-first project maps</div>
         </div>
+        <button
+          type="button"
+          className="icon-btn brand-collapse"
+          title="Collapse sidebar"
+          aria-label="Collapse sidebar"
+          aria-pressed="false"
+          onClick={toggleSidebar}
+        >
+          <IconPanelLeft size={15} />
+        </button>
       </div>
 
       <section className="project-block">
@@ -75,16 +92,29 @@ export function Sidebar() {
           <button
             type="button"
             className="icon-btn"
+            data-guide="new-project"
             title="New project"
             aria-label="New project"
             onClick={() => openDialog({ kind: 'new-project' })}
           >
             <IconPlus size={15} />
           </button>
+          {active && (
+            <button
+              type="button"
+              className="icon-btn delete-project-btn"
+              title="Delete project"
+              aria-label={`Delete project ${active.name}`}
+              onClick={() => openDialog({ kind: 'delete-project', id: active.id })}
+            >
+              <IconTrash size={15} />
+            </button>
+          )}
           <div className="menu-anchor">
             <button
               type="button"
               className="icon-btn"
+              data-guide="project-menu"
               aria-label="Project actions"
               aria-expanded={menuOpen}
               disabled={!active}
@@ -154,11 +184,12 @@ export function Sidebar() {
           </div>
         </div>
         <p className="project-description">
-          {active?.description || 'A map of how it all fits.'}
+          {active?.description || 'Create a project to start mapping.'}
         </p>
         <button
           type="button"
           className="btn btn-primary btn-block"
+          data-guide="add-node"
           onClick={() => addNode()}
           disabled={!active}
         >
@@ -199,13 +230,66 @@ export function Sidebar() {
       <footer className="sidebar-footer">
         {storageWarning && <p className="storage-warning">{storageWarning}</p>}
         <StorageStatus />
-        <button
-          type="button"
-          className="link-btn"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <IconUpload size={12} /> Import backup
-        </button>
+        <div className="menu-anchor settings-anchor">
+          <button
+            type="button"
+            className="link-btn"
+            data-guide="settings"
+            aria-haspopup="menu"
+            aria-expanded={settingsOpen}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <IconSettings size={12} /> Settings
+          </button>
+          {settingsOpen && (
+            <>
+              <div className="menu-scrim" onClick={() => setSettingsOpen(false)} />
+              <div className="menu settings-menu" role="menu">
+                <div className="menu-section">
+                  <span className="eyebrow">GUIDED TOUR</span>
+                  <p className="menu-hint">
+                    {tourCompleted ? 'Completed' : 'Not taken yet'} — 10 steps through
+                    every feature.
+                  </p>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-guide="tour"
+                    onClick={() => {
+                      useGuideStore.getState().start();
+                      setSettingsOpen(false);
+                    }}
+                  >
+                    <IconHelp size={13} />
+                    {tourCompleted ? 'Replay the tour' : 'Start the tour'}
+                  </button>
+                </div>
+                <hr />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setSettingsOpen(false);
+                  }}
+                >
+                  <IconUpload size={13} /> Import backup…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!active}
+                  onClick={() => {
+                    exportBackup('workspace');
+                    setSettingsOpen(false);
+                  }}
+                >
+                  <IconDownload size={13} /> Export all projects
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </footer>
 
       <input

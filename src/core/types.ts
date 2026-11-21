@@ -83,6 +83,8 @@ export interface FlowNode {
   type: NodeType;
   title: string;
   description: string;
+  /** Free-form Markdown documentation, rendered read-only in the properties panel. */
+  markdown: string;
   details: NodeDetails;
   position: Point;
   createdAt: string;

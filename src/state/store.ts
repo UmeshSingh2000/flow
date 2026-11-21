@@ -2,30 +2,34 @@ import { create } from 'zustand';
 import {
   addChildNode,
   createConnection,
+  createNodeRecord,
   createProject as buildProject,
+  defaultNodeTitle,
   deleteConnection as removeConnection,
   deleteNode as removeNode,
   duplicateNode as duplicateNodeInProject,
   getNode,
   getRootNode,
   moveNode as moveNodeInProject,
+  NODE_CARD_WIDTH,
   now,
   reparentNode as reparentInProject,
   updateConnection as updateConnectionInProject,
   updateNode as updateNodeInProject,
 } from '../core/graph';
 import { createId } from '../core/id';
-import { seedProject } from '../core/seed';
 import { buildBackup, parseBackup } from '../core/validation';
 import type {
   ConnectionType,
   FlowConnection,
   FlowNode,
   NodeDetails,
+  NodeType,
   Point,
   Project,
   WorkspaceSnapshot,
 } from '../core/types';
+import { NODE_TYPE_LABELS } from '../core/types';
 import type { StorageAdapter } from '../storage/repository';
 import { createStorage } from '../storage';
 
@@ -44,6 +48,16 @@ export interface ToastState {
   id: number;
   message: string;
   tone: Tone;
+}
+
+/** Where the user dropped a connector on empty canvas, in screen and flow coordinates. */
+export interface ConnectionMenuState {
+  sourceId: string;
+  handleType: 'source' | 'target';
+  screenX: number;
+  screenY: number;
+  flowX: number;
+  flowY: number;
 }
 
 export type NodePatch = Partial<
@@ -70,6 +84,9 @@ export interface FlowStore {
   focusRequest: { nodeId: string; nonce: number } | null;
   toast: ToastState | null;
   dialog: DialogState | null;
+  connectionMenu: ConnectionMenuState | null;
+  /** Node whose Markdown editor sheet is open, if any. */
+  markdownEditorNodeId: string | null;
 
   init(): Promise<void>;
 
@@ -96,10 +113,21 @@ export interface FlowStore {
   expandNodes(ids: string[]): void;
   setSearch(query: string): void;
   requestFocus(nodeId: string): void;
+  sidebarOpen: boolean;
+  toggleSidebar(): void;
+  setSidebarOpen(open: boolean): void;
 
   openDialog(dialog: DialogState): void;
   closeDialog(): void;
   notify(message: string, tone?: Tone): void;
+
+  openConnectionMenu(menu: ConnectionMenuState): void;
+  closeConnectionMenu(): void;
+  /** Creates a node of `type` at the drop point and connects it to the source node. */
+  createNodeFromConnection(type: NodeType): void;
+
+  openMarkdownEditor(nodeId: string): void;
+  closeMarkdownEditor(): void;
 
   exportBackup(scope: 'project' | 'workspace'): void;
   importBackup(
@@ -230,6 +258,9 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     focusRequest: null,
     toast: null,
     dialog: null,
+    connectionMenu: null,
+    markdownEditorNodeId: null,
+    sidebarOpen: true,
 
     async init() {
       if (get().status === 'ready' || initializing) return;
@@ -247,21 +278,22 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       let activeProjectId: string | null;
 
       if (!snapshot || snapshot.projects.length === 0) {
-        const project = seedProject();
-        projects = [project];
-        activeProjectId = project.id;
-        try {
-          await adapter.saveProject(project);
-          await adapter.saveActiveProjectId(project.id);
-        } catch {
-          set({ saveState: 'error' });
-        }
+        // Start from scratch: no sample or dummy projects are created.
+        projects = [];
+        activeProjectId = null;
       } else {
         const stored = snapshot;
         // IndexedDB returns records in key order; restore creation order instead.
-        projects = [...stored.projects].sort((a, b) =>
-          a.createdAt.localeCompare(b.createdAt),
-        );
+        // v1 records predate the markdown field, so normalize it on load.
+        projects = [...stored.projects]
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .map((project) => ({
+            ...project,
+            nodes: project.nodes.map((node) => ({
+              ...node,
+              markdown: node.markdown ?? '',
+            })),
+          }));
         activeProjectId = projects.some((project) => project.id === stored.activeProjectId)
           ? stored.activeProjectId
           : projects[0].id;
@@ -285,6 +317,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         activeProjectId: project.id,
         selectedNodeId: null,
         selectedConnectionId: null,
+        markdownEditorNodeId: null,
         search: '',
         expandedIds: allNodesExpanded([project]),
       }));
@@ -321,6 +354,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         activeProjectId,
         selectedNodeId: null,
         selectedConnectionId: null,
+        markdownEditorNodeId: null,
         expandedIds: allNodesExpanded(remaining),
       });
       pendingSaves.delete(id);
@@ -341,6 +375,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         activeProjectId: id,
         selectedNodeId: null,
         selectedConnectionId: null,
+        markdownEditorNodeId: null,
         search: '',
       });
       void adapter?.saveActiveProjectId(id);
@@ -426,6 +461,11 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         for (const removedId of result.removedIds) delete expandedIds[removedId];
         return {
           expandedIds,
+          markdownEditorNodeId:
+            state.markdownEditorNodeId &&
+            result.removedIds.includes(state.markdownEditorNodeId)
+              ? null
+              : state.markdownEditorNodeId,
           selectedNodeId:
             state.selectedNodeId && result.removedIds.includes(state.selectedNodeId)
               ? null
@@ -514,12 +554,75 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       set({ focusRequest: { nodeId, nonce: ++focusCounter } });
     },
 
+    toggleSidebar() {
+      set((state) => ({ sidebarOpen: !state.sidebarOpen }));
+    },
+
+    setSidebarOpen(open) {
+      set({ sidebarOpen: open });
+    },
+
     openDialog(dialog) {
       set({ dialog });
     },
 
     closeDialog() {
       set({ dialog: null });
+    },
+
+    openConnectionMenu(menu) {
+      set({ connectionMenu: menu });
+    },
+
+    closeConnectionMenu() {
+      set({ connectionMenu: null });
+    },
+
+    openMarkdownEditor(nodeId) {
+      set({ markdownEditorNodeId: nodeId });
+    },
+
+    closeMarkdownEditor() {
+      set({ markdownEditorNodeId: null });
+    },
+
+    createNodeFromConnection(type) {
+      const menu = get().connectionMenu;
+      set({ connectionMenu: null });
+      if (!menu) return;
+      const project = active();
+      if (!project) return;
+      const source = getNode(project, menu.sourceId);
+      if (!source) return;
+
+      const node = createNodeRecord({
+        projectId: project.id,
+        parentId: source.parentId,
+        type,
+        title: defaultNodeTitle(type),
+        position: {
+          x: menu.flowX - NODE_CARD_WIDTH / 2,
+          y: menu.flowY - 24,
+        },
+      });
+      // The new node joins the source's hierarchy level; the connector the user
+      // dragged becomes an explicit graph connection between them.
+      const withNode = { ...project, nodes: [...project.nodes, node] };
+      const [from, to] =
+        menu.handleType === 'source' ? [source.id, node.id] : [node.id, source.id];
+      const result = createConnection(withNode, from, to);
+      if (!result.ok) {
+        showToast(result.error, 'error');
+        return;
+      }
+      apply(result.project);
+      if (source.parentId) expand([source.parentId]);
+      set({
+        selectedNodeId: node.id,
+        selectedConnectionId: null,
+        focusRequest: { nodeId: node.id, nonce: ++focusCounter },
+      });
+      showToast(`Connected “${source.title}” to a new ${NODE_TYPE_LABELS[type]}.`);
     },
 
     notify(message, tone = 'info') {
@@ -580,6 +683,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         activeProjectId: first.id,
         selectedNodeId: null,
         selectedConnectionId: null,
+        markdownEditorNodeId: null,
         search: '',
         expandedIds: { ...state.expandedIds, ...allNodesExpanded(imported) },
       }));
