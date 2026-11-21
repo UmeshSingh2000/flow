@@ -1,9 +1,9 @@
 {
-  "name": "flow",
+  "name": "flow-docs",
   "version": "0.1.0",
   "private": true,
-  "displayName": "Flow",
-  "publisher": "UmeshSingh2000",
+  "displayName": "Flow Docs - Visual Project Documentation",
+  "publisher": "UmeshSingh",
   "repository": {
     "type": "git",
     "url": "https://github.com/UmeshSingh2000/flow.git"
