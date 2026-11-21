@@ -69,6 +69,8 @@ export const useGuideStore = create<GuideStore>()((set, get) => {
   const prepare = (step: GuideStep) => {
     const flow = useFlowStore.getState();
     if (!flow.sidebarOpen) flow.setSidebarOpen(true);
+    // Steps that act on the graph need the canvas view, whatever the user had open.
+    if (step.id === 'connect' || step.id === 'canvas-nav') flow.setView('canvas');
     if (!stepNeedsSelection(step)) return;
     if (flow.selectedNodeId) return;
     const project = flow.projects.find(

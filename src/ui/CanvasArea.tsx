@@ -15,6 +15,10 @@ import { countLinks, NODE_CARD_WIDTH } from '../core/graph';
 import { CONNECTION_TYPE_LABELS, MAX_IMAGES_PER_NODE } from '../core/types';
 import type { NodeType } from '../core/types';
 import { useActiveProject, useFlowStore } from '../state/store';
+import type { MapView } from '../state/store';
+import { BoardView } from './views/BoardView';
+import { DocsView } from './views/DocsView';
+import { TableView } from './views/TableView';
 import { filesToNodeImages } from './imageFiles';
 import { FlowConnectionEdge } from './FlowConnectionEdge';
 import { FlowNodeCard } from './FlowNodeCard';
@@ -29,6 +33,13 @@ const NODE_COLORS: Record<NodeType, string> = {
   process: '#d97706',
   decision: '#db2777',
 };
+
+const MAP_VIEWS: { id: MapView; label: string }[] = [
+  { id: 'canvas', label: 'Canvas' },
+  { id: 'table', label: 'Table' },
+  { id: 'board', label: 'Board' },
+  { id: 'docs', label: 'Docs' },
+];
 
 const nodeTypes = { flow: FlowNodeCard } as unknown as NodeTypes;
 const edgeTypes = { connection: FlowConnectionEdge } as unknown as EdgeTypes;
@@ -68,6 +79,8 @@ export function CanvasArea() {
   const importBackup = useFlowStore((state) => state.importBackup);
   const notify = useFlowStore((state) => state.notify);
 
+  const view = useFlowStore((state) => state.view);
+  const setView = useFlowStore((state) => state.setView);
   const addImage = useFlowStore((state) => state.addImage);
   const createNodeWithImages = useFlowStore((state) => state.createNodeWithImages);
 
@@ -254,19 +267,40 @@ export function CanvasArea() {
           <div className="eyebrow">PROJECT MAP</div>
           <h1>{project.name}</h1>
         </div>
-        <div className="canvas-counts">
-          <span>
-            {project.nodes.length} node{project.nodes.length === 1 ? '' : 's'}
-          </span>
-          <span className="dot-sep" aria-hidden>
-            ·
-          </span>
-          <span>
-            {countLinks(project)} link{countLinks(project) === 1 ? '' : 's'}
-          </span>
+        <div className="canvas-header-tools">
+          <div className="view-switch" role="tablist" aria-label="Project view">
+            {MAP_VIEWS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                aria-selected={view === entry.id}
+                className={view === entry.id ? 'is-active' : undefined}
+                onClick={() => setView(entry.id)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          <div className="canvas-counts">
+            <span>
+              {project.nodes.length} node{project.nodes.length === 1 ? '' : 's'}
+            </span>
+            <span className="dot-sep" aria-hidden>
+              ·
+            </span>
+            <span>
+              {countLinks(project)} link{countLinks(project) === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
       </header>
 
+      {view === 'table' && <TableView />}
+      {view === 'board' && <BoardView />}
+      {view === 'docs' && <DocsView />}
+
+      {view === 'canvas' && (
       <div
         className={`canvas-surface${dropActive ? ' is-drop-target' : ''}`}
         data-guide="canvas"
@@ -395,6 +429,7 @@ export function CanvasArea() {
           />
         </ReactFlow>
       </div>
+      )}
     </main>
   );
 }

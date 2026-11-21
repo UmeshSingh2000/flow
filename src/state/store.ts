@@ -40,6 +40,29 @@ import { createStorage } from '../storage';
 export type SaveState = 'saved' | 'saving' | 'error';
 export type Tone = 'info' | 'error';
 
+/** How the current project is presented: the spatial map plus readable alternatives. */
+export type MapView = 'canvas' | 'table' | 'board' | 'docs';
+
+const VIEW_KEY = 'flow-view';
+
+function readView(): MapView {
+  try {
+    const stored = window.localStorage.getItem(VIEW_KEY);
+    if (stored === 'table' || stored === 'board' || stored === 'docs') return stored;
+  } catch {
+    /* storage unavailable */
+  }
+  return 'canvas';
+}
+
+function writeView(view: MapView): void {
+  try {
+    window.localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export type DialogState =
   | { kind: 'new-project' }
   | { kind: 'edit-project'; id: string }
@@ -134,6 +157,11 @@ export interface FlowStore {
 
   openMarkdownEditor(nodeId: string): void;
   closeMarkdownEditor(): void;
+
+  view: MapView;
+  setView(view: MapView): void;
+  /** Switches to the canvas and centres a node — used by the other views. */
+  openInCanvas(nodeId: string): void;
 
   /** Attaches one image to a node, respecting the per-node limit. */
   addImage(nodeId: string, image: NodeImage): void;
@@ -275,6 +303,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     connectionMenu: null,
     markdownEditorNodeId: null,
     imageViewer: null,
+    view: readView(),
     sidebarOpen: true,
 
     async init() {
@@ -604,6 +633,21 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
 
     closeMarkdownEditor() {
       set({ markdownEditorNodeId: null });
+    },
+
+    setView(view) {
+      writeView(view);
+      set({ view });
+    },
+
+    openInCanvas(nodeId) {
+      writeView('canvas');
+      set({
+        view: 'canvas',
+        selectedNodeId: nodeId,
+        selectedConnectionId: null,
+        focusRequest: { nodeId, nonce: ++focusCounter },
+      });
     },
 
     addImage(nodeId, image) {
