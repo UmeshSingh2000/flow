@@ -227,7 +227,7 @@ export function PropertiesPanel() {
           <label className="field">
             <span>Parent node</span>
             <select
-              value={node.parentId ?? ''}
+              value={node.parentId === null || node.parentId === rootNode?.id ? '' : node.parentId}
               disabled={isRoot}
               onChange={(event) => {
                 const value = event.target.value;
@@ -235,7 +235,9 @@ export function PropertiesPanel() {
               }}
             >
               <option value="">{isRoot ? 'Top-level node (project root)' : 'Top-level node'}</option>
-              {parentCandidates.map((candidate) => (
+              {parentCandidates
+                .filter((candidate) => candidate.id !== rootNode?.id)
+                .map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
                   {candidate.title}
                 </option>

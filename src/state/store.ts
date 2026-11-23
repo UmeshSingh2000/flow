@@ -47,10 +47,48 @@ const VIEW_KEY = 'flow-view';
 export type Theme = 'light' | 'dark';
 const THEME_KEY = 'flow-theme';
 
+/**
+ * Theme state injected by the VS Code extension host before the app boots
+ * (see src/extension/extension.cjs). `theme` is the user's explicit saved
+ * choice; `hostTheme` mirrors the current VS Code color theme. Absent in the
+ * plain web app.
+ */
+export interface ThemeBootstrap {
+  theme: Theme | null;
+  hostTheme: Theme;
+}
+
+declare global {
+  interface Window {
+    __FLOW_THEME_BOOTSTRAP__?: ThemeBootstrap;
+  }
+}
+
+function isTheme(value: unknown): value is Theme {
+  return value === 'light' || value === 'dark';
+}
+
+function readBootstrap(): ThemeBootstrap | null {
+  const boot = window.__FLOW_THEME_BOOTSTRAP__;
+  if (!boot || typeof boot !== 'object') return null;
+  if (!isTheme(boot.hostTheme) || !(boot.theme === null || isTheme(boot.theme))) {
+    return null;
+  }
+  return boot;
+}
+
+/** True when the user (or host) provided an explicit theme choice up front. */
+export function hasExplicitTheme(): boolean {
+  const boot = readBootstrap();
+  return boot ? boot.theme !== null : false;
+}
+
 export function readTheme(): Theme {
+  const boot = readBootstrap();
+  if (boot) return boot.theme ?? boot.hostTheme;
   try {
     const stored = window.localStorage.getItem(THEME_KEY);
-    if (stored === 'light' || stored === 'dark') return stored;
+    if (isTheme(stored)) return stored;
   } catch {
     /* storage unavailable */
   }
@@ -173,6 +211,11 @@ export interface FlowStore {
   sidebarOpen: boolean;
   toggleSidebar(): void;
   setSidebarOpen(open: boolean): void;
+
+  /** Whether the bottom command palette is open. */
+  commandPaletteOpen: boolean;
+  openCommandPalette(): void;
+  closeCommandPalette(): void;
 
   openDialog(dialog: DialogState): void;
   closeDialog(): void;
@@ -334,6 +377,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     imageViewer: null,
     view: readView(),
     sidebarOpen: true,
+    commandPaletteOpen: false,
 
     async init() {
       if (get().status === 'ready' || initializing) return;
@@ -640,6 +684,14 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       set({ sidebarOpen: open });
     },
 
+    openCommandPalette() {
+      set({ commandPaletteOpen: true });
+    },
+
+    closeCommandPalette() {
+      set({ commandPaletteOpen: false });
+    },
+
     openDialog(dialog) {
       set({ dialog });
     },
@@ -751,9 +803,16 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       const source = getNode(project, menu.sourceId);
       if (!source) return;
 
+      // The new node joins the source's hierarchy level; the connector the user
+      // dragged becomes an explicit graph connection between them. The project
+      // root is the only node without a parent, so dragging from the root must
+      // parent the new node to the root rather than create a second root.
+      const parentId =
+        source.parentId && getNode(project, source.parentId) ? source.parentId : source.id;
+
       const node = createNodeRecord({
         projectId: project.id,
-        parentId: source.parentId,
+        parentId,
         type,
         title: defaultNodeTitle(type),
         position: {
@@ -761,8 +820,6 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
           y: menu.flowY - 24,
         },
       });
-      // The new node joins the source's hierarchy level; the connector the user
-      // dragged becomes an explicit graph connection between them.
       const withNode = { ...project, nodes: [...project.nodes, node] };
       const [from, to] =
         menu.handleType === 'source' ? [source.id, node.id] : [node.id, source.id];
@@ -772,7 +829,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         return;
       }
       apply(result.project);
-      if (source.parentId) expand([source.parentId]);
+      expand([parentId]);
       set({
         selectedNodeId: node.id,
         selectedConnectionId: null,

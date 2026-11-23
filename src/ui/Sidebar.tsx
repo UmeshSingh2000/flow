@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
 import { useGuideStore } from '../state/guideStore';
+import { useShareStore } from '../state/shareStore';
 import { useActiveProject, useFlowStore } from '../state/store';
 import { ProjectTree } from './ProjectTree';
 import { StorageStatus } from './StorageStatus';
 import {
   IconDownload,
   IconHelp,
+  IconLink,
   IconMore,
   IconPanelLeft,
   IconPencil,
@@ -32,6 +34,7 @@ export function Sidebar() {
   const toggleSidebar = useFlowStore((state) => state.toggleSidebar);
   const theme = useFlowStore((state) => state.theme);
   const setTheme = useFlowStore((state) => state.setTheme);
+  const openShareDialog = useShareStore((state) => state.openDialog);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -157,6 +160,16 @@ export function Sidebar() {
                     }}
                   >
                     <IconDownload size={13} /> Export all projects
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      openShareDialog();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <IconLink size={13} /> Share read-only…
                   </button>
                   <button
                     type="button"

@@ -17,6 +17,7 @@ npm run dev        # http://localhost:5173
 ```bash
 npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production bundle
+npm test           # share-server tests (Node's built-in test runner)
 npm run preview    # serve the production build
 ```
 
@@ -54,6 +55,7 @@ Flow starts empty. Create a project (or import a backup) to start mapping.
 | Layout | Left sidebar collapses from the brand header and reopens from an edge button; the properties panel appears only while something is selected, so the canvas reclaims both areas |
 | Persistence | Autosave (400 ms debounce) to IndexedDB, save-state indicator, security-net in-memory fallback with a visible warning |
 | Portability | Versioned JSON backup export (single project or whole workspace) and validated import that never overwrites an existing project |
+| Sharing | Read-only view of the active project over the local network from the VS Code extension: password-gated link, live updates, no account, no cloud, no database |
 | Offline | No network requests after load; all editing works disconnected |
 | Guided tour | A blocking first-run tour that walks a new user from creating a project through nodes, nesting, documentation, Markdown, connections, canvas navigation and backups; restartable from the sidebar |
 
@@ -85,6 +87,57 @@ It can be started at any time from **Settings** in the bottom-left of the sideba
 shows whether the tour was completed and offers *Start*/*Replay the tour*. Settings also
 holds backup import and workspace export.
 
+## Share a read-only view over the local network
+
+LAN sharing is available in the **VS Code extension**, because a browser tab cannot
+accept incoming connections. The extension host runs a small HTTP server on the
+machine's local network; nothing is installed on the guest machine and nothing leaves
+the network.
+
+1. Open Flow from VS Code (**Flow: Open**).
+2. Open the project menu (⋯) beside the project name and choose **Share read-only…**.
+3. Leave the password blank to generate one, or choose your own, then start sharing.
+4. Send the guest the link and password. They open the link in any browser on the same
+   WiFi, enter the password, and see a read-only board.
+
+The guest can pan and zoom, select nodes and connections, read documentation and
+Markdown, and open images. There is no edit, delete, connect, or import path — the
+server exposes only `GET`/`HEAD` routes. The sharer's edits appear in the guest view
+within about five seconds. The share stops when the sharer stops it, switches or
+deletes the project, closes VS Code, or after four hours.
+
+### Trying it on one machine
+
+You do not need a second device. The guest is an ordinary web browser:
+
+1. Start a share from Flow in VS Code.
+2. Open the link in Chrome/Firefox. Use a private/incognito window if you want a
+   clean session with no cached password.
+3. Edit a node in VS Code and watch the browser update within a few seconds.
+
+Two VS Code windows also work — each window has its own extension host and can host
+its own share; open both links in browser tabs. If the generated link picks an
+address that the browser cannot reach (VPN, Docker, or multiple adapters), replace
+the host with `127.0.0.1` while keeping the port and `/s/<id>` path.
+
+For extension development, build the webview assets once and launch a development
+window:
+
+```bash
+npm run build:extension
+code --extensionDevelopmentPath=. --new-window
+```
+
+Caveats worth knowing:
+
+- The link is **plain HTTP** on the local network. The password gates access but does
+  not encrypt the board; use this only on a network you trust.
+- The guest needs the sharer's LAN address. Some WiFi networks (guest networks,
+  corporate access points) block device-to-device traffic, and the first share may
+  trigger an OS firewall prompt.
+- The share server exists only while the extension is running and the share is active.
+  Snapshots are held in the extension host's memory, not in a database.
+
 ## Architecture
 
 ```
@@ -100,7 +153,15 @@ src/
     memory.ts      visible fallback when IndexedDB is unavailable
   state/
     store.ts       zustand store: state, actions, debounced autosave
+    shareStore.ts  sharer-side share state and live snapshot updates
   ui/              React components + React Flow canvas
+    SharedApp.tsx  guest viewer served by the LAN share server
+    shareBridge.ts webview ↔ extension host messaging for sharing
+  extension/
+    extension.cjs  VS Code webview host and message routing
+    shareServer.cjs read-only LAN HTTP server (Node, no database)
+tests/
+  shareServer.test.cjs  auth, ETag, expiry, rate-limit, traversal, stop tests
 ```
 
 Data flows one way: UI → store → pure core functions → `StorageAdapter`. No component

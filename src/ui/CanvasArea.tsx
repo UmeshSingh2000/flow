@@ -13,26 +13,17 @@ import {
 import type { Edge, EdgeTypes, NodeTypes } from '@xyflow/react';
 import { countLinks, NODE_CARD_WIDTH } from '../core/graph';
 import { CONNECTION_TYPE_LABELS, MAX_IMAGES_PER_NODE } from '../core/types';
-import type { NodeType } from '../core/types';
 import { useActiveProject, useFlowStore } from '../state/store';
 import type { MapView } from '../state/store';
 import { BoardView } from './views/BoardView';
 import { DocsView } from './views/DocsView';
 import { TableView } from './views/TableView';
 import { filesToNodeImages } from './imageFiles';
+import { facingHandles, NODE_COLORS } from './canvasPresentation';
 import { FlowConnectionEdge } from './FlowConnectionEdge';
 import { FlowNodeCard } from './FlowNodeCard';
 import type { FlowCanvasNode } from './FlowNodeCard';
 import { IconPlus, IconUpload } from './icons';
-
-const NODE_COLORS: Record<NodeType, string> = {
-  project: '#4f46e5',
-  module: '#7c3aed',
-  feature: '#2563eb',
-  'sub-feature': '#0891b2',
-  process: '#d97706',
-  decision: '#db2777',
-};
 
 const MAP_VIEWS: { id: MapView; label: string }[] = [
   { id: 'canvas', label: 'Canvas' },
@@ -71,6 +62,7 @@ export function CanvasArea() {
 
   const selectNode = useFlowStore((state) => state.selectNode);
   const selectConnection = useFlowStore((state) => state.selectConnection);
+  const deleteConnection = useFlowStore((state) => state.deleteConnection);
   const connect = useFlowStore((state) => state.connect);
   const openConnectionMenu = useFlowStore((state) => state.openConnectionMenu);
   const previewNodePosition = useFlowStore((state) => state.previewNodePosition);
@@ -142,48 +134,40 @@ export function CanvasArea() {
       position: node.position,
       data: { node },
       selected: node.id === selectedNodeId,
+      // Node deletion is confirmed through the dialog, never by a stray key.
+      deletable: false,
     }));
   }, [project, selectedNodeId]);
 
   const edges = useMemo<Edge[]>(() => {
     if (!project) return [];
     const nodeIds = new Set(project.nodes.map((node) => node.id));
+    const positions = new Map(project.nodes.map((node) => [node.id, node.position]));
     const list: Edge[] = [];
 
-    for (const node of project.nodes) {
-      if (!node.parentId || !nodeIds.has(node.parentId)) continue;
-      list.push({
-        id: `h-${node.id}`,
-        source: node.parentId,
-        target: node.id,
-        type: 'default',
-        selectable: false,
-        deletable: false,
-        focusable: false,
-        className: 'edge-hierarchy',
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 12,
-          height: 12,
-          color: '#cbd5e1',
-        },
-      });
-    }
-
+    // Hierarchy is shown in the project tree, not on the canvas. Only explicit
+    // graph connections are drawn as wires, so deleting a wire can never remove
+    // a node or change the hierarchy.
     for (const connection of project.connections) {
       if (!nodeIds.has(connection.source) || !nodeIds.has(connection.target)) continue;
       const label =
         connection.label.trim() ||
         (connection.type ? CONNECTION_TYPE_LABELS[connection.type] : '');
       const isSelected = connection.id === selectedConnectionId;
+      const handles = facingHandles(
+        positions.get(connection.source),
+        positions.get(connection.target),
+      );
       list.push({
         id: `c-${connection.id}`,
         source: connection.source,
         target: connection.target,
+        sourceHandle: handles.source,
+        targetHandle: handles.target,
         type: 'connection',
         data: { connectionId: connection.id },
         selectable: true,
-        deletable: false,
+        deletable: true,
         selected: isSelected,
         className: `edge-connection${isSelected ? ' is-selected' : ''}`,
         label: label || undefined,
@@ -364,6 +348,11 @@ export function CanvasArea() {
               }
             }
           }}
+          onEdgesDelete={(deleted) => {
+            for (const edge of deleted) {
+              if (edge.id.startsWith('c-')) deleteConnection(edge.id.slice(2));
+            }
+          }}
           onPaneClick={() => selectNode(null)}
           onConnect={(connection) => {
             if (!connection.source || !connection.target) return;
@@ -398,7 +387,7 @@ export function CanvasArea() {
           fitViewOptions={{ padding: 32, maxZoom: 1, minZoom: 0.25 }}
           minZoom={0.25}
           maxZoom={1.75}
-          deleteKeyCode={null}
+          deleteKeyCode={['Delete', 'Backspace']}
           defaultEdgeOptions={{ type: 'default' }}
           connectionLineType={ConnectionLineType.Bezier}
           connectionLineStyle={{ stroke: '#2563eb', strokeWidth: 1.6 }}

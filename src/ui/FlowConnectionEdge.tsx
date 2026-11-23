@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath } from '@xyflow/react';
 import type { Edge, EdgeProps } from '@xyflow/react';
 import { useFlowStore } from '../state/store';
 import { IconX } from './icons';
 
-export type FlowConnectionEdgeType = Edge<{ connectionId: string }, 'connection'>;
+export type FlowConnectionEdgeType = Edge<
+  { connectionId: string; readOnly?: boolean },
+  'connection'
+>;
 
 /**
  * A graph connection. Hovering the line (or its label) reveals a disconnect
  * button at the midpoint so an edge can be removed without hunting through the
- * properties panel. Hierarchy edges use the built-in bezier edge instead.
+ * properties panel. The button stays visible while the edge is selected, so it
+ * can also be reached by clicking the line first.
  */
 export function FlowConnectionEdge({
   id,
@@ -27,7 +31,27 @@ export function FlowConnectionEdge({
 }: EdgeProps<FlowConnectionEdgeType>) {
   const [hoveringLine, setHoveringLine] = useState(false);
   const [hoveringTools, setHoveringTools] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deleteConnection = useFlowStore((state) => state.deleteConnection);
+
+  const cancelHide = () => {
+    if (hideTimer.current !== null) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+
+  // Give the pointer time to travel from the thin line onto the button.
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null;
+      setHoveringLine(false);
+      setHoveringTools(false);
+    }, 220);
+  };
+
+  useEffect(() => cancelHide, []);
 
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
@@ -41,43 +65,67 @@ export function FlowConnectionEdge({
 
   const visible = hoveringLine || hoveringTools || Boolean(selected);
   const connectionId = data?.connectionId;
+  const readOnly = data?.readOnly === true;
 
   return (
     <>
       <g
-        onMouseEnter={() => setHoveringLine(true)}
-        onMouseLeave={() => setHoveringLine(false)}
+        onMouseEnter={() => {
+          cancelHide();
+          setHoveringLine(true);
+        }}
+        onMouseLeave={scheduleHide}
       >
         <BaseEdge
           id={id}
           path={path}
           markerEnd={markerEnd}
           style={style}
-          interactionWidth={22}
+          interactionWidth={32}
         />
       </g>
 
       <EdgeLabelRenderer>
-        <div
-          className={`edge-tools${visible ? ' is-visible' : ''}`}
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
-          onMouseEnter={() => setHoveringTools(true)}
-          onMouseLeave={() => setHoveringTools(false)}
-        >
-          <button
-            type="button"
-            className="nodrag nopan edge-disconnect"
-            title="Disconnect"
-            aria-label="Disconnect these nodes"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (connectionId) deleteConnection(connectionId);
+        {readOnly ? (
+          label ? (
+            <div
+              className="edge-label edge-label-static"
+              style={{
+                position: 'absolute',
+                pointerEvents: 'none',
+                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              }}
+            >
+              {label}
+            </div>
+          ) : null
+        ) : (
+          <div
+            className={`edge-tools${visible ? ' is-visible' : ''}`}
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+            onMouseEnter={() => {
+              cancelHide();
+              setHoveringTools(true);
             }}
+            onMouseLeave={scheduleHide}
           >
-            <IconX size={9} />
-          </button>
-          {label ? <span className="edge-label">{label}</span> : null}
-        </div>
+            <button
+              type="button"
+              className="nodrag nopan edge-disconnect"
+              title="Disconnect — or press Delete"
+              aria-label="Disconnect these nodes"
+              tabIndex={visible ? 0 : -1}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (connectionId) deleteConnection(connectionId);
+              }}
+            >
+              <IconX size={12} />
+            </button>
+            {label ? <span className="edge-label">{label}</span> : null}
+          </div>
+        )}
       </EdgeLabelRenderer>
     </>
   );

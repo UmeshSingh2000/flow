@@ -13,6 +13,7 @@ src/main.tsx
 src/styles.css
 src/extension/extension.js
 scripts/**
+tests/**
 vite.config.ts
 tsconfig.json
 package-lock.json

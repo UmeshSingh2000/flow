@@ -138,3 +138,22 @@ export function IconUpload(props: IconProps) {
     </svg>
   );
 }
+
+export function IconTerminal(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <rect x="2.2" y="3" width="11.6" height="10" rx="2" />
+      <path d="M5.4 6.4L7.6 8.2 5.4 10M8.8 10h2.2" />
+    </svg>
+  );
+}
+
+export function IconLink(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="M6.8 9.2l2.4-2.4" />
+      <path d="M7.4 4.9l1.1-1.1a2.4 2.4 0 0 1 3.4 3.4l-1.1 1.1" />
+      <path d="M8.6 11.1l-1.1 1.1a2.4 2.4 0 0 1-3.4-3.4l1.1-1.1" />
+    </svg>
+  );
+}

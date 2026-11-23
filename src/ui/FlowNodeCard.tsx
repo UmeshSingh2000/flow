@@ -5,10 +5,21 @@ import type { FlowNode } from '../core/types';
 import { useFlowStore } from '../state/store';
 import { IconTrash } from './icons';
 
-export type FlowCanvasNode = Node<{ node: FlowNode }, 'flow'>;
+export type FlowCanvasNode = Node<{ node: FlowNode; readOnly?: boolean }, 'flow'>;
+
+export type NodeSide = 'left' | 'right' | 'top' | 'bottom';
+
+/** Every node exposes a source and a target handle on each side. */
+export const NODE_SIDES: { side: NodeSide; position: Position }[] = [
+  { side: 'left', position: Position.Left },
+  { side: 'right', position: Position.Right },
+  { side: 'top', position: Position.Top },
+  { side: 'bottom', position: Position.Bottom },
+];
 
 export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCanvasNode>) {
   const node = data.node;
+  const readOnly = data.readOnly === true;
   const hasDocs = Object.values(node.details).some((value) => value.trim().length > 0);
   const openDialog = useFlowStore((state) => state.openDialog);
   const isRoot = useFlowStore((state) => {
@@ -21,15 +32,19 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCa
   return (
     <div
       className={`node-card node-card-${node.type}${selected ? ' is-selected' : ''}${
-        isRoot ? '' : ' has-delete'
-      }`}
+        readOnly ? ' is-readonly' : ''
+      }${!readOnly && !isRoot ? ' has-delete' : ''}`}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        isConnectable={isConnectable}
-        className="node-handle node-handle-target"
-      />
+      {NODE_SIDES.map(({ side, position }) => (
+        <Handle
+          key={`${side}-target`}
+          id={`${side}-target`}
+          type="target"
+          position={position}
+          isConnectable={isConnectable && !readOnly}
+          className={`node-handle node-handle-target node-handle-${side}`}
+        />
+      ))}
       <div className="node-card-head">
         <span className={`type-dot type-dot-${node.type}`} aria-hidden />
         <span className="node-type">{NODE_TYPE_LABELS[node.type]}</span>
@@ -51,7 +66,7 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCa
           )}
         </div>
       )}
-      {!isRoot && (
+      {!readOnly && !isRoot && (
         <button
           type="button"
           className="nodrag nopan node-delete"
@@ -66,12 +81,16 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCa
           <IconTrash size={12} />
         </button>
       )}
-      <Handle
-        type="source"
-        position={Position.Right}
-        isConnectable={isConnectable}
-        className="node-handle node-handle-source"
-      />
+      {NODE_SIDES.map(({ side, position }) => (
+        <Handle
+          key={`${side}-source`}
+          id={`${side}-source`}
+          type="source"
+          position={position}
+          isConnectable={isConnectable && !readOnly}
+          className={`node-handle node-handle-source node-handle-${side}`}
+        />
+      ))}
     </div>
   );
 }

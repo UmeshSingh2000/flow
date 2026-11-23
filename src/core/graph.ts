@@ -347,6 +347,11 @@ export type ProjectResult =
   | { ok: true; project: Project }
   | { ok: false; error: string };
 
+/**
+ * Moves a node under a new parent. `null` means "top level", which is a child of
+ * the project root: the root is the only node without a parent, so storing
+ * `parentId: null` on another node would create a second root.
+ */
 export function reparentNode(
   project: Project,
   nodeId: string,
@@ -357,13 +362,17 @@ export function reparentNode(
   if (node.parentId === null) {
     return { ok: false, error: 'The project root cannot be re-parented.' };
   }
-  if (newParentId !== null && !getNode(project, newParentId)) {
+  const targetParentId = newParentId ?? getRootNode(project)?.id ?? null;
+  if (targetParentId === null) {
+    return { ok: false, error: 'The project has no root node.' };
+  }
+  if (!getNode(project, targetParentId)) {
     return { ok: false, error: 'Target parent node not found.' };
   }
-  if (newParentId === nodeId) {
+  if (targetParentId === nodeId) {
     return { ok: false, error: 'A node cannot be its own parent.' };
   }
-  if (wouldCreateCycle(project, nodeId, newParentId)) {
+  if (wouldCreateCycle(project, nodeId, targetParentId)) {
     return { ok: false, error: 'That would move the node beneath one of its own descendants.' };
   }
   return {
@@ -372,7 +381,7 @@ export function reparentNode(
       ...project,
       nodes: project.nodes.map((candidate) =>
         candidate.id === nodeId
-          ? { ...candidate, parentId: newParentId, updatedAt: now() }
+          ? { ...candidate, parentId: targetParentId, updatedAt: now() }
           : candidate,
       ),
       updatedAt: now(),

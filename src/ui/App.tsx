@@ -4,12 +4,14 @@ import { getRootNode } from '../core/graph';
 import { useGuideStore } from '../state/guideStore';
 import { flushStorage, useFlowStore } from '../state/store';
 import { CanvasArea } from './CanvasArea';
+import { CommandPalette } from './CommandPalette';
 import { ConnectionMenu } from './ConnectionMenu';
 import { DialogHost } from './DialogHost';
 import { Guide } from './Guide';
 import { ImageViewer } from './ImageViewer';
 import { MarkdownEditor } from './MarkdownEditor';
 import { PropertiesPanel } from './PropertiesPanel';
+import { ShareDialog } from './ShareDialog';
 import { Sidebar } from './Sidebar';
 import { Toasts } from './Toasts';
 import { IconPanelLeft } from './icons';
@@ -44,6 +46,9 @@ export default function App() {
       if (useGuideStore.getState().status === 'active') return;
 
       const state = useFlowStore.getState();
+
+      // The palette owns its own keyboard handling while it is open.
+      if (state.commandPaletteOpen) return;
 
       if (event.key === 'Escape') {
         if (state.imageViewer) {
@@ -149,7 +154,9 @@ export default function App() {
       </div>
       <Toasts />
       <DialogHost />
+      <ShareDialog />
       <ConnectionMenu />
+      <CommandPalette />
       <MarkdownEditor />
       <ImageViewer />
       <Guide />
