@@ -104,7 +104,9 @@ The guest can pan and zoom, select nodes and connections, read documentation and
 Markdown, and open images. There is no edit, delete, connect, or import path — the
 server exposes only `GET`/`HEAD` routes. The sharer's edits appear in the guest view
 within about five seconds. The share stops when the sharer stops it, switches or
-deletes the project, closes VS Code, or after four hours.
+deletes the project, closes VS Code, or after four hours. While a share is running, a
+green **Sharing** pill stays in the canvas header — click it to reopen the link,
+password, and stop button.
 
 ### Trying it on one machine
 

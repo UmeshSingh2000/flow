@@ -13,6 +13,7 @@ import {
 import type { Edge, EdgeTypes, NodeTypes } from '@xyflow/react';
 import { countLinks, NODE_CARD_WIDTH } from '../core/graph';
 import { CONNECTION_TYPE_LABELS, MAX_IMAGES_PER_NODE } from '../core/types';
+import { useShareStore } from '../state/shareStore';
 import { useActiveProject, useFlowStore } from '../state/store';
 import type { MapView } from '../state/store';
 import { BoardView } from './views/BoardView';
@@ -23,7 +24,7 @@ import { facingHandles, NODE_COLORS } from './canvasPresentation';
 import { FlowConnectionEdge } from './FlowConnectionEdge';
 import { FlowNodeCard } from './FlowNodeCard';
 import type { FlowCanvasNode } from './FlowNodeCard';
-import { IconPlus, IconUpload } from './icons';
+import { IconLink, IconPlus, IconUpload } from './icons';
 
 const MAP_VIEWS: { id: MapView; label: string }[] = [
   { id: 'canvas', label: 'Canvas' },
@@ -76,6 +77,13 @@ export function CanvasArea() {
   const theme = useFlowStore((state) => state.theme);
   const addImage = useFlowStore((state) => state.addImage);
   const createNodeWithImages = useFlowStore((state) => state.createNodeWithImages);
+
+  const sharing = useShareStore(
+    (state) =>
+      state.share !== null &&
+      (state.phase === 'active' || state.phase === 'stopping'),
+  );
+  const openShareDialog = useShareStore((state) => state.openDialog);
 
   const { setCenter, screenToFlowPosition } = useReactFlow();
   const lastFocusNonce = useRef(0);
@@ -253,6 +261,18 @@ export function CanvasArea() {
           <h1>{project.name}</h1>
         </div>
         <div className="canvas-header-tools">
+          {sharing && (
+            <button
+              type="button"
+              className="sharing-indicator"
+              title="This project is being shared read-only. Open sharing controls."
+              onClick={openShareDialog}
+            >
+              <span className="sharing-live-dot" aria-hidden />
+              <IconLink size={12} />
+              <span>Sharing</span>
+            </button>
+          )}
           <div className="view-switch" role="tablist" aria-label="Project view">
             {MAP_VIEWS.map((entry) => (
               <button
