@@ -1,18 +1,21 @@
 # Flow
 
-An offline-first visual project documentation app. Flow lets you describe a software
-project as a graph of nodes — project → modules → features → sub-features — with
-documentation on each node and explicit relationships that can cross branches.
+Flow is an offline-first visual project documentation app. Build a project map from
+nodes, hierarchical parent-child relationships, and explicit connections that can
+cross branches. The tree, canvas, and alternate views all represent the same project
+data.
 
-This repository is the **first working prototype** of the web MVP described in
-[`flow-project-requirements.md`](./flow-project-requirements.md).
+Flow runs as a web app and as a Visual Studio Code extension. It starts empty: create
+a project or import a backup to get started.
 
-## Run it
+## Run the web app
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 ```
+
+Other useful scripts:
 
 ```bash
 npm run typecheck  # tsc --noEmit
@@ -23,233 +26,136 @@ npm run preview    # serve the production build
 
 ## VS Code extension
 
-Package and install the existing editor as a VS Code extension with one command:
+Package and install the extension with:
 
 ```bash
 npm run package
 ```
 
-The command builds the webview assets, creates `flow-<version>.vsix`, and runs
-`code --install-extension ... --force`. If your VS Code executable is not named
-`code`, set `VSCODE_EXECUTABLE` before running the command.
-
-After installation, run **Flow: Open** from the VS Code Command Palette. The web
-application is built and served from separate extension files, so `npm run dev`,
-`npm run build`, and `npm run preview` continue to run normally.
-
-Flow starts empty. Create a project (or import a backup) to start mapping.
-
-## What works
-
-| Area | Implemented |
-|---|---|
-| Projects | Create, rename (with description), switch, delete with confirmation; each project has a protected root node |
-| Nodes | Create at root or as a child, edit title/type/description, drag on canvas, duplicate, delete from the card (hover/selection) or the properties panel with descendant-aware confirmation |
-| Hierarchy | Parent–child nesting to any depth, tree with expand/collapse, re-parent via the properties panel, self/descendant cycle prevention |
-| Node documentation | Eight structured fields (purpose, inputs, outputs, preconditions, behavior, success/failure result, notes) plus description; a dot on the card marks nodes with docs |
-| Markdown | Per-node Markdown with a rendered preview in the properties panel and a full-screen editor that rises from the bottom; a Write/Preview toggle switches between the editor and the sanitized render, and Escape closes it |
-| Images | Attach up to six images per node by picking files in the panel or dropping them on the canvas — onto a node to attach there, onto empty space to create a node named after the file; node cards show a thumbnail, clicking one opens a full-screen lightbox |
-| Connections | Drag a handle to connect any two nodes, including across branches; release a connector on empty canvas to pick a node type, creating a connected node at that spot; optional label and relationship type; disconnect by hovering the line for its × button, from the node's *Connected nodes* list, or by selecting the edge and deleting it; duplicate and self connections are rejected |
-| Canvas | Pan, zoom, fit-to-view, minimap, dotted grid, click to select, tree selection locates and centres the node |
-| Search | Filters the project tree by title/description while keeping matching ancestors |
-| Layout | Left sidebar collapses from the brand header and reopens from an edge button; the properties panel appears only while something is selected, so the canvas reclaims both areas |
-| Persistence | Autosave (400 ms debounce) to IndexedDB, save-state indicator, security-net in-memory fallback with a visible warning |
-| Portability | Versioned JSON backup export (single project or whole workspace) and validated import that never overwrites an existing project |
-| Sharing | Read-only view of the active project over the local network from the VS Code extension: password-gated link, live updates, no account, no cloud, no database |
-| Offline | No network requests after load; all editing works disconnected |
-| Guided tour | A blocking first-run tour that walks a new user from creating a project through nodes, nesting, documentation, Markdown, connections, canvas navigation and backups; restartable from the sidebar |
-
-Keyboard: `Delete`/`Backspace` deletes the selected connection, or asks to confirm
-deletion of the selected node; `Escape` clears selection and closes dialogs.
-
-### Guided tour
-
-New users get a blocking tour the first time the workspace is empty. It is built from
-three small pieces:
-
-- `src/guide/steps.ts` — pure step data (title, text, tips, `data-guide` targets and the
-  action each step requires). Helpers such as `projectMaxDepth` and `nodesSignature`
-  read a plain `Project`, so the tour logic is testable without a browser.
-- `src/state/guideStore.ts` — the step machine: `start`, `next`, `finish`, and
-  `evaluate`, which advances a step once its requirement is met. It also decides when to
-  auto-start and remembers completion in `localStorage`.
-- `src/ui/Guide.tsx` — the overlay: four blockers leave a hole over the highlighted
-  control, so the guided action is the only thing that can be clicked while the tour
-  runs. Keyboard shortcuts are suspended too, except inside the dialogs the tour itself
-  opens. Explanatory steps use a Next button; action steps advance by themselves.
-
-Steps are: welcome → create project → add node → nest a child → document the node →
-write Markdown → connect two nodes → move around the canvas → backups → done.
-`Skip tour` exits at any point.
-
-The tour auto-starts only when the workspace is empty and it has never been finished.
-It can be started at any time from **Settings** in the bottom-left of the sidebar, which
-shows whether the tour was completed and offers *Start*/*Replay the tour*. Settings also
-holds backup import and workspace export.
-
-## Share a read-only view over the local network
-
-LAN sharing is available in the **VS Code extension**, because a browser tab cannot
-accept incoming connections. The extension host runs a small HTTP server on the
-machine's local network; nothing is installed on the guest machine and nothing leaves
-the network.
-
-1. Open Flow from VS Code (**Flow: Open**).
-2. Open the project menu (⋯) beside the project name and choose **Share read-only…**.
-3. Leave the password blank to generate one, or choose your own, then start sharing.
-4. Send the guest the link and password. They open the link in any browser on the same
-   WiFi, enter the password, and see a read-only board.
-
-The guest can pan and zoom, select nodes and connections, read documentation and
-Markdown, and open images. There is no edit, delete, connect, or import path — the
-server exposes only `GET`/`HEAD` routes. The sharer's edits appear in the guest view
-within about five seconds. The share stops when the sharer stops it, switches or
-deletes the project, closes VS Code, or after four hours. While a share is running, a
-green **Sharing** pill stays in the canvas header — click it to reopen the link,
-password, and stop button.
-
-### Trying it on one machine
-
-You do not need a second device. The guest is an ordinary web browser:
-
-1. Start a share from Flow in VS Code.
-2. Open the link in Chrome/Firefox. Use a private/incognito window if you want a
-   clean session with no cached password.
-3. Edit a node in VS Code and watch the browser update within a few seconds.
-
-Two VS Code windows also work — each window has its own extension host and can host
-its own share; open both links in browser tabs. If the generated link picks an
-address that the browser cannot reach (VPN, Docker, or multiple adapters), replace
-the host with `127.0.0.1` while keeping the port and `/s/<id>` path.
-
-For extension development, build the webview assets once and launch a development
-window:
+This builds the webview assets, creates `flow-<version>.vsix`, installs it, and asks
+VS Code to reload. If your VS Code executable is not named `code`, set
+`VSCODE_EXECUTABLE` before running the command. After installation, run **Flow: Open**
+from the Command Palette. For extension development, build the assets and launch a
+development window instead:
 
 ```bash
 npm run build:extension
 code --extensionDevelopmentPath=. --new-window
 ```
 
-Caveats worth knowing:
+The extension uses VS Code's theme until a Flow theme is explicitly chosen, then
+remembers that choice in extension state. The web app offers light and dark themes in
+**Settings** and remembers the choice in the browser.
 
-- The link is **plain HTTP** on the local network. The password gates access but does
-  not encrypt the board; use this only on a network you trust.
-- The guest needs the sharer's LAN address. Some WiFi networks (guest networks,
-  corporate access points) block device-to-device traffic, and the first share may
-  trigger an OS firewall prompt.
-- The share server exists only while the extension is running and the share is active.
-  Snapshots are held in the extension host's memory, not in a database.
+## Features
+
+| Area | Features |
+|---|---|
+| Projects | Create, rename, switch, and delete projects; project deletion requires confirmation. Each project has a protected root node and optional description. |
+| Nodes and hierarchy | Create nodes at the root or as children, edit their title/type/description, drag them on the canvas, duplicate them, and re-parent them. Nest to any depth; the tree supports expand/collapse and search. Deletion explains descendant handling and requires confirmation. |
+| Documentation | Eight structured fields (purpose, inputs, outputs, preconditions, behavior, success/failure result, notes), a description, and per-node Markdown with a rendered preview and full-screen Write/Preview editor. |
+| Images | Attach up to six images to a node through the properties panel or by dropping files on a node. Dropping onto empty canvas creates a node named after the image. Cards show thumbnails; select one to open the full-screen viewer. |
+| Connections | Connect any two nodes—including across branches—by dragging between handles. Drop a connector on empty canvas to create a connected node. Connections can have a relationship type and label; select or hover one to remove it. Self-connections and duplicate connections of the same type are rejected. |
+| Views | Switch between the interactive **Canvas**, sortable **Table**, type-grouped **Board**, and Markdown-focused **Docs** views. Selecting nodes is synchronized; double-click an item in Table, Board, or Docs to locate it on the canvas. |
+| Canvas | Pan, zoom, fit-to-view, use the minimap and dotted grid, drag nodes, and select nodes or connections. Selecting a tree item selects and centres that node on the canvas. |
+| Command palette | Open **Commands** or press `Ctrl+K` (Windows/Linux) or `⌘K` (macOS) to search commands and nodes, create or edit items, connect nodes, switch views and themes, navigate, and manage backups. |
+| Appearance and layout | Light and dark themes; collapse the sidebar and let the canvas reclaim space when the properties panel is closed. |
+| Persistence and portability | Autosave with a 400 ms debounce to IndexedDB, visible save status, and a warning if only the in-memory fallback is available. Export a project or workspace as versioned JSON and import validated backups without overwriting existing projects. |
+| Guided tour | A restartable first-run tour guides users through project creation, nodes, documentation, connections, canvas navigation, and backups. Replay it from Settings or the command palette. |
+| Read-only sharing | In the VS Code extension, password-gated local-network sharing lets guests view the active project and see updates without an account or cloud service. |
+| Offline use | Editing uses local project data and requires no account, backend, or remote API. The web app works offline after it has loaded; its shell is not currently precached for a cold offline launch. |
+
+Keyboard: `Delete`/`Backspace` deletes the selected connection or asks to confirm
+selected-node deletion. `Escape` clears selection and closes dialogs. The command
+palette is available with `Ctrl+K` or `⌘K`.
+
+## Read-only local-network sharing
+
+LAN sharing is available only in the VS Code extension, whose extension host can accept
+incoming connections. It serves a read-only view over the local network; the browser
+web app alone cannot host a share.
+
+1. Open Flow in VS Code (**Flow: Open**).
+2. Open the project menu (⋯) beside the project name and choose **Share read-only...**.
+3. Leave the password blank to generate one, or enter a password, then start sharing.
+4. Give the guest the link and password. They open the link in a browser on the same
+   network and enter the password.
+
+Guests can pan and zoom, select nodes and connections, read documentation and Markdown,
+and open images. They cannot edit, delete, connect, or import. The server exposes only
+`GET` and `HEAD` routes. The guest view refreshes automatically, generally within five
+seconds. A **Sharing** indicator in the canvas header reopens the share controls.
+
+The share stops when it is stopped manually, the shared project is switched or deleted,
+VS Code closes, or the four-hour lifetime expires. Snapshots are held in extension-host
+memory, not in a database; guest project content is not saved on the guest device.
+
+Sharing uses **plain HTTP**: the password gates access but does not encrypt project
+content. Share only on a network you trust. Firewalls or Wi-Fi client isolation may
+prevent guests from reaching the host. For a local test, open the generated link in a
+browser on the same machine; if the selected LAN address is unreachable (for example,
+with a VPN or multiple adapters), try replacing its host with `127.0.0.1`, keeping the
+port and `/s/<id>` path.
+
+## Data and backups
+
+Projects are stored locally in IndexedDB (`flow-workspace`, with `projects` and `meta`
+stores). Saves are debounced by 400 ms and flushed when the page is hidden or closed.
+The status indicator reports **Saving...**, **Saved on this device**, or **Save failed**.
+If IndexedDB is unavailable, Flow uses a visibly marked in-memory fallback; data in
+that fallback is not persistent, so export a backup before closing the app.
+
+Backups are versioned JSON and can contain one project or the whole workspace. Import
+validates the file before applying it and reports malformed JSON, unsupported versions,
+missing nodes, broken parent references, hierarchy cycles, duplicate IDs, self-links,
+and duplicate edges. Existing projects are not overwritten: an imported project whose
+ID already exists is assigned a fresh identity.
+
+Images travel with backups as inline data URLs. Flow scales images to a 1400 px longest
+edge and re-encodes them as WebP (JPEG fallback); small animated GIFs pass through.
+Source files over 12 MB are refused, and import rejects payloads above approximately
+3 MB per image.
 
 ## Architecture
 
-```
+```text
 src/
-  core/            framework-independent domain (no React, DOM, or storage)
-    types.ts       node/connection/project model
-    graph.ts       pure operations: add, move, re-parent, connect, delete, duplicate
-    validation.ts  backup parsing, schema versioning, reference + cycle checks
-    id.ts          stable id generation
-  storage/         the persistence boundary (FR-DATA-09 / ARCH-02)
+  core/            framework-independent domain and validation
+    types.ts       project, node, connection, and workspace models
+    graph.ts       graph operations: create, move, connect, delete, duplicate
+    validation.ts  versioned backup parsing and reference/cycle checks
+    id.ts          stable ID generation
+  storage/         persistence boundary
     repository.ts  StorageAdapter interface
-    indexeddb.ts   browser implementation
-    memory.ts      visible fallback when IndexedDB is unavailable
-  state/
-    store.ts       zustand store: state, actions, debounced autosave
-    shareStore.ts  sharer-side share state and live snapshot updates
-  ui/              React components + React Flow canvas
-    SharedApp.tsx  guest viewer served by the LAN share server
-    shareBridge.ts webview ↔ extension host messaging for sharing
+    indexeddb.ts   browser persistence adapter
+    memory.ts      visible, non-persistent fallback
+  state/           Zustand stores, actions, autosave, guide and sharing state
+  ui/              React editor, React Flow canvas, properties, tree and views
+    Shared*.tsx    read-only guest experience for LAN shares
+    shareBridge.ts webview-to-extension messages for sharing
+    vscodeBridge.ts theme and host integration for VS Code
   extension/
     extension.cjs  VS Code webview host and message routing
-    shareServer.cjs read-only LAN HTTP server (Node, no database)
+    shareServer.cjs password-gated, read-only LAN HTTP server
+
 tests/
-  shareServer.test.cjs  auth, ETag, expiry, rate-limit, traversal, stop tests
+  shareServer.test.cjs  share server authentication and lifecycle tests
 ```
 
-Data flows one way: UI → store → pure core functions → `StorageAdapter`. No component
-writes to storage directly, and `core/` can be reused by a future VS Code webview.
+The data flow is UI → store → pure core operations → `StorageAdapter`. UI components do
+not write to storage directly, and the core does not depend on React or browser APIs.
+The same editor UI is bundled into the VS Code webview; the extension host separately
+runs the optional LAN share server.
 
-### Persistence and backups
+## Current limitations
 
-Projects are stored whole in IndexedDB (`flow-workspace` database, `projects` and
-`meta` stores). Saves are debounced by 400 ms, flushed when the tab is hidden or
-closed, and surfaced as *Saving… / Saved on this device / Save failed*.
+- Browser persistence uses IndexedDB, not SQLite-WASM with OPFS. The storage interface
+  keeps the persistence implementation replaceable, but IndexedDB is the current
+  authoritative browser store.
+- The web app does not yet precache its shell with a service worker/PWA, so offline use
+  requires the app assets to have already loaded.
+- Descendant collapse is available in the project tree, not on the canvas.
+- The editor is desktop-first; the properties panel is hidden on narrow screens.
 
-Backups are JSON so they are portable between the web app and any future host:
-
-```json
-{
-  "format": "flow-backup",
-  "version": 2,
-  "exportedAt": "2026-11-21T08:00:00.000Z",
-  "projects": [
-    {
-      "id": "p_…",
-      "name": "Example project",
-      "description": "An example of a project map",
-      "createdAt": "…",
-      "updatedAt": "…",
-      "nodes": [
-        {
-          "id": "n_…",
-          "projectId": "p_…",
-          "parentId": null,
-          "type": "project",
-          "title": "Example project",
-          "description": "A project root node",
-          "markdown": "# Overview\n\nFree-form **Markdown** documentation.",
-          "details": { "purpose": "", "inputs": "", "outputs": "", "preconditions": "", "behavior": "", "successResult": "", "failureResult": "", "notes": "" },
-          "position": { "x": 0, "y": 330 },
-          "createdAt": "…",
-          "updatedAt": "…"
-        }
-      ],
-      "connections": [
-        { "id": "c_…", "projectId": "p_…", "source": "n_…", "target": "n_…", "type": "leads-to", "label": "autosaves", "createdAt": "…", "updatedAt": "…" }
-      ]
-    }
-  ]
-}
-```
-
-Schema version 2 added the optional node `markdown` field and version 3 the node
-`images` array. Older backups still import: missing fields are normalized (empty
-string / empty array) rather than rejected, and projects loaded from an older
-IndexedDB database are upgraded the same way on load.
-
-Images are stored inline as `data:image/...` URLs so they travel with a backup. To
-keep that affordable they are downscaled to a 1400px longest edge and re-encoded as
-WebP (JPEG fallback) on intake; small animated GIFs pass through untouched, source
-files over 12 MB are refused, and imports reject payloads above ~3 MB per image.
-
-Import rejects invalid JSON, unknown formats, future schema versions, missing nodes,
-broken parent references, hierarchy cycles, duplicate ids, self-connections, and
-duplicate edges, listing the problems instead of partially applying the file. A
-project whose id already exists is imported under a fresh identity
-(`… (imported)`) rather than overwriting local work.
-
-## Deliberate deviations from the v1.0 spec
-
-- **Storage is IndexedDB, not SQLite-WASM + OPFS (FR-DATA-02).** This is the one MVP
-  MUST not met. The `StorageAdapter` interface exists precisely so a SQLite adapter
-  can be dropped in without touching `core/`, `state/`, or the UI; see “Next steps”.
-  Export is versioned JSON rather than a `.sqlite` file.
-- **No service worker/PWA manifest (FR-OFF-04, SHOULD).** The app makes no network
-  calls and keeps working after it has loaded, but the shell is not precached for a
-  cold offline start.
-- **No canvas-level descendant collapse (FR-CAN-09, SHOULD).** Branches collapse in
-  the project tree only.
-- **Desktop-first.** Below 980 px the properties panel is hidden (FR-UI-05 SHOULD).
-- Custom node types, Markdown descriptions, and workspace-level merging remain the
-  open product decisions listed in §16 of the requirements.
-
-## Next steps
-
-1. Add `storage/sqlite.ts` (SQLite WASM + OPFS SAHPool) implementing `StorageAdapter`,
-   with the IndexedDB adapter retained as the fallback for unsupported browsers, plus
-   schema versioning/migrations inside the adapter.
-2. Precache the app shell with a service worker and add a web app manifest.
-3. Collapse/expand descendants on the canvas; optional per-branch focus mode.
-4. Unit-test the pure core (`graph.ts`, `validation.ts`) — cycle detection, cascade
-   deletion, connect rules, and backup round-trips.
-5. Extract `core/` into a workspace package and host the editor in a VS Code webview.
+See [`flow-project-requirements.md`](./flow-project-requirements.md) for the product
+requirements and intended boundaries.
