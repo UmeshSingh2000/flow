@@ -131,6 +131,17 @@ export function IconPanelLeft(props: IconProps) {
   );
 }
 
+export function IconArrange(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <rect x="1.7" y="2" width="4.6" height="4" rx="1" />
+      <rect x="9.7" y="2" width="4.6" height="4" rx="1" />
+      <rect x="5.7" y="10" width="4.6" height="4" rx="1" />
+      <path d="M4 6v2.2h8V6M8 8.2V10" />
+    </svg>
+  );
+}
+
 export function IconUpload(props: IconProps) {
   return (
     <svg {...iconProps(props)}>

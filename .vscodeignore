@@ -20,3 +20,4 @@ package-lock.json
 index.html
 CLAUDE.md
 flow-project-requirements.md
+.test-build/**

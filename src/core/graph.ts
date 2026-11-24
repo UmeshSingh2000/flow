@@ -240,8 +240,13 @@ export function duplicateNode(project: Project, nodeId: string): AddChildResult 
   const node = getNode(project, nodeId);
   if (!node) return null;
   const timestamp = now();
+  const rest: FlowNode = { ...node };
+  // Identity and provenance belong to the original; a copy must not inherit
+  // them or terminal plans could update the wrong node.
+  delete rest.externalKey;
+  delete rest.provenance;
   const copy: FlowNode = {
-    ...node,
+    ...rest,
     id: createId('n'),
     title: `${node.title} copy`,
     details: { ...node.details },

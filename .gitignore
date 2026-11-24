@@ -4,3 +4,5 @@ dist/
 *.vsix
 *.local
 .DS_Store
+
+.test-build/

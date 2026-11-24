@@ -1,4 +1,17 @@
-import { applyTheme, hasExplicitTheme, useFlowStore, type Theme } from '../state/store';
+import {
+  NODE_TYPES,
+  ROOT_REF,
+  type FlowNode,
+  type Project,
+} from '../core/types';
+import { buildBackup } from '../core/validation';
+import {
+  applyTheme,
+  flushStorage,
+  hasExplicitTheme,
+  useFlowStore,
+  type Theme,
+} from '../state/store';
 
 /**
  * Thin bridge between the Flow app and the VS Code extension host, used only
@@ -72,5 +85,299 @@ export function initThemeBridge(): void {
     if (state.theme === previous.theme || applyingHostTheme) return;
     explicit = true;
     api.postMessage({ type: 'flow:setTheme', theme: state.theme });
+  });
+}
+
+/* --------------------------------------------------------- terminal commands */
+
+const LIST_LIMIT = 2000;
+const MAX_RESULT_BYTES = 6_000_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function projectFor(projectId: unknown): Project | null {
+  const state = useFlowStore.getState();
+  const id =
+    typeof projectId === 'string' && projectId ? projectId : state.activeProjectId;
+  return state.projects.find((candidate) => candidate.id === id) ?? null;
+}
+
+function resolveNode(project: Project, ref: unknown): FlowNode | null {
+  if (typeof ref !== 'string' || !ref.trim()) return null;
+  const value = ref.trim();
+  if (value === ROOT_REF) {
+    return project.nodes.find((node) => node.parentId === null) ?? null;
+  }
+  return (
+    project.nodes.find((node) => node.externalKey === value) ??
+    project.nodes.find((node) => node.id === value) ??
+    null
+  );
+}
+
+function nodePath(project: Project, node: FlowNode): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  let current: FlowNode | undefined = node;
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    parts.unshift(current.externalKey || current.title);
+    current = project.nodes.find((candidate) => candidate.id === current?.parentId);
+  }
+  return parts.join(' / ');
+}
+
+function nodeSummary(project: Project, node: FlowNode, includeMarkdown: boolean) {
+  return {
+    id: node.id,
+    externalKey: node.externalKey ?? null,
+    parentId: node.parentId,
+    type: node.type,
+    title: node.title,
+    path: nodePath(project, node),
+    description: node.description,
+    markdownLength: node.markdown.length,
+    imageCount: node.images.length,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
+    provenance: node.provenance ?? null,
+    ...(includeMarkdown
+      ? { markdown: node.markdown, details: node.details }
+      : {}),
+  };
+}
+
+function statusResult() {
+  const state = useFlowStore.getState();
+  const project =
+    state.projects.find((candidate) => candidate.id === state.activeProjectId) ?? null;
+  return {
+    activeProjectId: project?.id ?? null,
+    activeProjectName: project?.name ?? null,
+    workspaceProjectId: state.workspaceProjectId,
+    projectCount: state.projects.length,
+    nodeCount: project?.nodes.length ?? 0,
+    connectionCount: project?.connections.length ?? 0,
+    storageKind: state.storageKind,
+    persistent: state.persistent,
+    storageWarning: state.storageWarning,
+    saveState: state.saveState,
+    projects: state.projects.map((candidate) => ({
+      id: candidate.id,
+      name: candidate.name,
+      nodeCount: candidate.nodes.length,
+      connectionCount: candidate.connections.length,
+      updatedAt: candidate.updatedAt,
+    })),
+  };
+}
+
+function listResult(payload: Record<string, unknown>) {
+  const project = projectFor(payload.projectId);
+  if (!project) return { ok: false as const, errors: ['No Flow project is open.'] };
+  const type = typeof payload.type === 'string' ? payload.type : null;
+  if (type && !(NODE_TYPES as readonly string[]).includes(type)) {
+    return {
+      ok: false as const,
+      errors: [`Unknown node type "${type}".`],
+    };
+  }
+  const includeMarkdown = payload.includeMarkdown === true;
+  const nodes = project.nodes
+    .filter((node) => !type || node.type === type)
+    .slice(0, LIST_LIMIT)
+    .map((node) => nodeSummary(project, node, includeMarkdown));
+  return {
+    ok: true as const,
+    result: {
+      projectId: project.id,
+      projectName: project.name,
+      total: project.nodes.length,
+      returned: nodes.length,
+      truncated: nodes.length === LIST_LIMIT && project.nodes.length > LIST_LIMIT,
+      nodes,
+    },
+  };
+}
+
+function getResult(payload: Record<string, unknown>) {
+  const project = projectFor(payload.projectId);
+  if (!project) return { ok: false as const, errors: ['No Flow project is open.'] };
+  const ref = payload.ref ?? payload.externalKey ?? payload.id ?? ROOT_REF;
+  const node = resolveNode(project, ref);
+  if (!node) {
+    return { ok: false as const, errors: [`No node matches "${String(ref)}".`] };
+  }
+  const connections = project.connections
+    .filter(
+      (connection) => connection.source === node.id || connection.target === node.id,
+    )
+    .map((connection) => ({
+      id: connection.id,
+      source: connection.source,
+      sourceKey:
+        project.nodes.find((candidate) => candidate.id === connection.source)
+          ?.externalKey ?? connection.source,
+      target: connection.target,
+      targetKey:
+        project.nodes.find((candidate) => candidate.id === connection.target)
+          ?.externalKey ?? connection.target,
+      type: connection.type,
+      label: connection.label,
+    }));
+  return {
+    ok: true as const,
+    result: {
+      projectId: project.id,
+      node: {
+        ...nodeSummary(project, node, true),
+        images: node.images.map((image) => ({
+          id: image.id,
+          name: image.name,
+          width: image.width,
+          height: image.height,
+        })),
+      },
+      connections,
+    },
+  };
+}
+
+function snapshotResult(payload: Record<string, unknown>) {
+  const project = projectFor(payload.projectId);
+  if (!project) {
+    return { ok: false as const, errors: ['No Flow project is open.'] };
+  }
+  return {
+    ok: true as const,
+    result: { projectId: project.id, backup: buildBackup([project]) },
+  };
+}
+
+async function applyResult(payload: Record<string, unknown>) {
+  const store = useFlowStore.getState();
+  const result = store.applyExternalPlan({
+    ops: payload.ops,
+    dryRun: payload.dryRun === true,
+    provenance: payload.provenance,
+    projectId:
+      typeof payload.projectId === 'string' ? payload.projectId : undefined,
+  });
+
+  let persisted = true;
+  if (result.ok && !result.dryRun) {
+    await flushStorage();
+    persisted = useFlowStore.getState().saveState === 'saved';
+  }
+  if (!persisted) {
+    return {
+      ok: false as const,
+      errors: [
+        ...result.errors,
+        'The plan was applied in memory but could not be saved. Export a backup before closing Flow.',
+      ],
+      result: { ...result, persisted },
+    };
+  }
+  return { ok: result.ok, errors: result.errors, result: { ...result, persisted } };
+}
+
+export function initCommandBridge(): void {
+  const api = getVsCodeApi();
+  if (!api) return;
+
+  let commandsReadyPosted = false;
+  let lastWorkspaceProjectId: string | null = null;
+
+  const announce = () => {
+    const state = useFlowStore.getState();
+    if (state.status !== 'ready') return;
+    // Report the link before signalling readiness so a queued apply uses the
+    // project this app actually created or opened.
+    if (
+      state.workspaceProjectId &&
+      state.workspaceProjectId !== lastWorkspaceProjectId
+    ) {
+      lastWorkspaceProjectId = state.workspaceProjectId;
+      api.postMessage({
+        type: 'flow:workspaceProject',
+        projectId: state.workspaceProjectId,
+        workspaceName: null,
+      });
+    }
+    if (!commandsReadyPosted) {
+      commandsReadyPosted = true;
+      api.postMessage({ type: 'flow:commandsReady' });
+    }
+  };
+
+  announce();
+  useFlowStore.subscribe(announce);
+
+  subscribeHostMessages((data) => {
+    if (data.type !== 'flow:command') return;
+    const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+    if (!requestId) return;
+    const command = typeof data.command === 'string' ? data.command : '';
+    const payload = isRecord(data.payload) ? data.payload : {};
+
+    void (async () => {
+      let response: { ok: boolean; result?: unknown; errors?: string[] };
+      try {
+        switch (command) {
+          case 'status':
+            response = { ok: true, result: statusResult() };
+            break;
+          case 'list':
+            response = listResult(payload);
+            break;
+          case 'get':
+            response = getResult(payload);
+            break;
+          case 'snapshot':
+            response = snapshotResult(payload);
+            break;
+          case 'apply':
+            response = await applyResult(payload);
+            break;
+          default:
+            response = {
+              ok: false,
+              errors: [`Unknown Flow command "${command}".`],
+            };
+        }
+      } catch (error) {
+        response = {
+          ok: false,
+          errors: [error instanceof Error ? error.message : 'Flow command failed.'],
+        };
+      }
+
+      let result = response.result;
+      try {
+        // Snapshots exist to back up whatever the project holds, so they are
+        // exempt from the normal response-size guard.
+        if (
+          command !== 'snapshot' &&
+          result !== undefined &&
+          JSON.stringify(result).length > MAX_RESULT_BYTES
+        ) {
+          result = { error: 'The response is too large. Request less data.' };
+          response = { ok: false, errors: ['The response is too large.'] };
+        }
+      } catch {
+        result = undefined;
+      }
+
+      api.postMessage({
+        type: 'flow:commandResult',
+        requestId,
+        ok: response.ok,
+        ...(result !== undefined ? { result } : {}),
+        ...(response.errors ? { errors: response.errors } : {}),
+      });
+    })();
   });
 }

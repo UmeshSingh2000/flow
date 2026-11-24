@@ -1,6 +1,6 @@
 {
   "name": "flow-docs",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "displayName": "Flow Docs - Visual Project Documentation",
   "publisher": "UmeshSingh",
@@ -12,14 +12,34 @@
     "vscode": "^1.90.0"
   },
   "main": "./src/extension/extension.cjs",
+  "bin": {
+    "flow": "./cli/flow.mjs"
+  },
   "activationEvents": [
-    "onCommand:flow.open"
+    "onCommand:flow.open",
+    "onStartupFinished"
   ],
   "contributes": {
     "commands": [
       {
         "command": "flow.open",
         "title": "Flow: Open"
+      },
+      {
+        "command": "flow.linkWorkspace",
+        "title": "Flow: Link Workspace to Active Project"
+      },
+      {
+        "command": "flow.setupEverything",
+        "title": "Flow: Set Up Everything (CLI + Claude)"
+      },
+      {
+        "command": "flow.installCli",
+        "title": "Flow: Install Terminal CLI"
+      },
+      {
+        "command": "flow.installClaudeIntegration",
+        "title": "Flow: Install Claude Integration"
       }
     ]
   },
@@ -31,8 +51,10 @@
     "build": "tsc --noEmit && vite build",
     "build:extension": "npm run typecheck && vite build --base ./ --outDir .flow-extension/webview --emptyOutDir",
     "package": "node scripts/package-extension.mjs",
+    "pretest": "rolldown tests/support/coreEntry.ts -f cjs -o .test-build/core.cjs -p node",
     "test": "node --test \"tests/**/*.test.cjs\"",
     "typecheck": "tsc --noEmit",
+    "cli": "node cli/flow.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -6,7 +6,7 @@ import App from './ui/App';
 import { SharedApp } from './ui/SharedApp';
 import { applyTheme, readTheme } from './state/store';
 import { initShareStore } from './state/shareStore';
-import { initThemeBridge } from './ui/vscodeBridge';
+import { initCommandBridge, initThemeBridge } from './ui/vscodeBridge';
 
 const share = window.__FLOW_SHARE__;
 applyTheme(share?.theme ?? readTheme());
@@ -26,6 +26,7 @@ if (share) {
 } else {
   initThemeBridge();
   initShareStore();
+  initCommandBridge();
   createRoot(container).render(
     <StrictMode>
       <App />

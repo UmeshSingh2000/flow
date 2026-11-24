@@ -24,7 +24,7 @@ import { facingHandles, NODE_COLORS } from './canvasPresentation';
 import { FlowConnectionEdge } from './FlowConnectionEdge';
 import { FlowNodeCard } from './FlowNodeCard';
 import type { FlowCanvasNode } from './FlowNodeCard';
-import { IconLink, IconPlus, IconUpload } from './icons';
+import { IconArrange, IconLink, IconPlus, IconUpload } from './icons';
 
 const MAP_VIEWS: { id: MapView; label: string }[] = [
   { id: 'canvas', label: 'Canvas' },
@@ -68,6 +68,7 @@ export function CanvasArea() {
   const openConnectionMenu = useFlowStore((state) => state.openConnectionMenu);
   const previewNodePosition = useFlowStore((state) => state.previewNodePosition);
   const commitNodePosition = useFlowStore((state) => state.commitNodePosition);
+  const autoArrange = useFlowStore((state) => state.autoArrange);
   const openDialog = useFlowStore((state) => state.openDialog);
   const importBackup = useFlowStore((state) => state.importBackup);
   const notify = useFlowStore((state) => state.notify);
@@ -85,7 +86,7 @@ export function CanvasArea() {
   );
   const openShareDialog = useShareStore((state) => state.openDialog);
 
-  const { setCenter, screenToFlowPosition } = useReactFlow();
+  const { setCenter, screenToFlowPosition, getNodes, fitView } = useReactFlow();
   const lastFocusNonce = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dropActive, setDropActive] = useState(false);
@@ -132,6 +133,27 @@ export function CanvasArea() {
 
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
     createNodeWithImages(position, images);
+  };
+
+  const handleAutoArrange = () => {
+    // Measured heights make rows that contain richer cards (descriptions,
+    // images) breathe instead of overlapping. Unmeasured nodes fall back to the
+    // core default.
+    const heights: Record<string, number> = {};
+    for (const node of getNodes()) {
+      const height = node.measured?.height;
+      if (typeof height === 'number' && Number.isFinite(height) && height > 0) {
+        heights[node.id] = height;
+      }
+    }
+    autoArrange(heights);
+    // Positions are committed to the store, so wait for the next paint before
+    // fitting the viewport to the new layout.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        void fitView({ padding: 40, duration: 350, maxZoom: 1 });
+      });
+    });
   };
 
   const nodes = useMemo<FlowCanvasNode[]>(() => {
@@ -271,6 +293,17 @@ export function CanvasArea() {
               <span className="sharing-live-dot" aria-hidden />
               <IconLink size={12} />
               <span>Sharing</span>
+            </button>
+          )}
+          {view === 'canvas' && (
+            <button
+              type="button"
+              className="arrange-btn"
+              title="Arrange all nodes into a tidy tree"
+              onClick={handleAutoArrange}
+            >
+              <IconArrange size={13} />
+              <span>Auto arrange</span>
             </button>
           )}
           <div className="view-switch" role="tablist" aria-label="Project view">

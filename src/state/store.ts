@@ -21,6 +21,12 @@ import {
   updateNode as updateNodeInProject,
 } from '../core/graph';
 import { createId } from '../core/id';
+import { computeAutoLayout } from '../core/layout';
+import {
+  applyPlan,
+  type ApplyPlanSummary,
+  type OperationChange,
+} from '../core/operations';
 import { buildBackup, parseBackup } from '../core/validation';
 import type {
   ConnectionType,
@@ -58,10 +64,54 @@ export interface ThemeBootstrap {
   hostTheme: Theme;
 }
 
+/**
+ * Injected by the VS Code extension host when the window has a workspace
+ * folder. `projectId` is the linked Flow project (null on the first open, in
+ * which case the app creates one and reports its id back to the host).
+ */
+export interface WorkspaceBootstrap {
+  projectId: string | null;
+  workspaceName: string;
+}
+
 declare global {
   interface Window {
     __FLOW_THEME_BOOTSTRAP__?: ThemeBootstrap;
+    __FLOW_WORKSPACE__?: WorkspaceBootstrap;
   }
+}
+
+export interface ExternalPlanPayload {
+  ops: unknown;
+  dryRun?: boolean;
+  provenance?: unknown;
+  projectId?: string;
+}
+
+export interface ExternalPlanResult {
+  ok: boolean;
+  dryRun: boolean;
+  errors: string[];
+  changes: OperationChange[];
+  summary: ApplyPlanSummary;
+  projectId: string | null;
+}
+
+function emptyPlanSummary(): ApplyPlanSummary {
+  return { created: 0, updated: 0, unchanged: 0, connected: 0 };
+}
+
+function readWorkspaceBootstrap(): WorkspaceBootstrap | null {
+  const boot = window.__FLOW_WORKSPACE__;
+  if (!boot || typeof boot !== 'object') return null;
+  const projectId = boot.projectId;
+  const workspaceName = boot.workspaceName;
+  if (!(projectId === null || typeof projectId === 'string')) return null;
+  if (typeof workspaceName !== 'string') return null;
+  return {
+    projectId: projectId && projectId.trim() ? projectId : null,
+    workspaceName: workspaceName.trim() || 'Workspace',
+  };
 }
 
 function isTheme(value: unknown): value is Theme {
@@ -169,6 +219,8 @@ export interface FlowStore {
 
   projects: Project[];
   activeProjectId: string | null;
+  /** Flow project linked to the current VS Code workspace, if any. */
+  workspaceProjectId: string | null;
   selectedNodeId: string | null;
   selectedConnectionId: string | null;
   saveState: SaveState;
@@ -185,6 +237,12 @@ export interface FlowStore {
 
   init(): Promise<void>;
 
+  /**
+   * Applies a validated plan from the terminal/MCP bridge. A dry run returns
+   * the diff without touching the project.
+   */
+  applyExternalPlan(payload: ExternalPlanPayload): ExternalPlanResult;
+
   createProject(name: string, description?: string): void;
   updateProject(id: string, patch: { name?: string; description?: string }): void;
   deleteProject(id: string): Promise<void>;
@@ -195,6 +253,8 @@ export interface FlowStore {
   duplicateNode(id: string): void;
   previewNodePosition(id: string, position: Point): void;
   commitNodePosition(id: string, position: Point): void;
+  /** Repositions every node into a tidy hierarchy tree using measured heights. */
+  autoArrange(nodeHeights?: Record<string, number>): void;
   deleteNode(id: string): ActionResult;
   reparentNode(id: string, parentId: string | null): ActionResult;
 
@@ -364,6 +424,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     theme: readTheme(),
     projects: [],
     activeProjectId: null,
+    workspaceProjectId: null,
     selectedNodeId: null,
     selectedConnectionId: null,
     saveState: 'saved',
@@ -417,15 +478,125 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
           : projects[0].id;
       }
 
+      // A window with a workspace folder is linked to exactly one project.
+      // On the first open (or when the linked project was deleted) the app
+      // creates the project here and reports the new id back to the host.
+      const workspace = readWorkspaceBootstrap();
+      let workspaceProjectId: string | null = null;
+      let createdForWorkspace = false;
+      let linkedProject: Project | null = null;
+
+      if (workspace) {
+        linkedProject =
+          (workspace.projectId
+            ? projects.find((project) => project.id === workspace.projectId)
+            : undefined) ?? null;
+        if (!linkedProject) {
+          linkedProject = buildProject(workspace.workspaceName);
+          projects = [...projects, linkedProject];
+          createdForWorkspace = true;
+        }
+        activeProjectId = linkedProject.id;
+        workspaceProjectId = linkedProject.id;
+      }
+
       set({
         status: 'ready',
         projects,
         activeProjectId,
+        workspaceProjectId,
         expandedIds: allNodesExpanded(projects),
         storageKind: adapter.kind,
         persistent: adapter.persistent,
         storageWarning: adapter.warning,
       });
+
+      if (workspace && activeProjectId) {
+        if (createdForWorkspace && linkedProject) scheduleSave(linkedProject);
+        void adapter?.saveActiveProjectId(activeProjectId);
+      }
+      if (createdForWorkspace && linkedProject) {
+        showToast(
+          `Created the Flow project “${linkedProject.name}” for this workspace.`,
+        );
+      }
+    },
+
+    applyExternalPlan(payload) {
+      const state = get();
+      const dryRun = payload.dryRun === true;
+      const fallback = (errors: string[]): ExternalPlanResult => ({
+        ok: false,
+        dryRun,
+        errors,
+        changes: [],
+        summary: emptyPlanSummary(),
+        projectId: state.activeProjectId,
+      });
+
+      let project =
+        state.projects.find((candidate) => candidate.id === state.activeProjectId) ?? null;
+      if (payload.projectId) {
+        const requested = state.projects.find(
+          (candidate) => candidate.id === payload.projectId,
+        );
+        if (!requested) {
+          return fallback([
+            `Flow project "${payload.projectId}" is not available in this app. Re-link the workspace from the Command Palette.`,
+          ]);
+        }
+        project = requested;
+      }
+      if (!project) {
+        return fallback(['There is no active Flow project.']);
+      }
+
+      const result = applyPlan(project, {
+        ops: payload.ops,
+        dryRun,
+        provenance: payload.provenance,
+      });
+      const outcome: ExternalPlanResult = {
+        ok: result.ok,
+        dryRun: result.dryRun,
+        errors: result.errors,
+        changes: result.changes,
+        summary: result.summary,
+        projectId: project.id,
+      };
+      if (!result.ok || result.dryRun || !result.project) return outcome;
+
+      if (state.activeProjectId !== project.id) {
+        set({
+          activeProjectId: project.id,
+          selectedNodeId: null,
+          selectedConnectionId: null,
+          markdownEditorNodeId: null,
+        });
+        void adapter?.saveActiveProjectId(project.id);
+      }
+      apply(result.project);
+
+      const createdIds = result.changes
+        .filter(
+          (change) =>
+            change.action === 'created' &&
+            change.operation === 'upsert-node' &&
+            typeof change.nodeId === 'string',
+        )
+        .map((change) => change.nodeId as string);
+      if (createdIds.length > 0) expand(createdIds);
+
+      const parts: string[] = [];
+      if (result.summary.created > 0) parts.push(`${result.summary.created} added`);
+      if (result.summary.updated > 0) parts.push(`${result.summary.updated} updated`);
+      if (result.summary.connected > 0) parts.push(`${result.summary.connected} connected`);
+      showToast(
+        parts.length > 0
+          ? `Flow plan applied: ${parts.join(', ')}.`
+          : 'Flow plan applied with no changes.',
+      );
+      return outcome;
     },
 
     createProject(name, description = '') {
@@ -563,6 +734,31 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       const project = active();
       if (!project) return;
       apply(moveNodeInProject(project, id, position));
+    },
+
+    autoArrange(nodeHeights) {
+      const project = active();
+      if (!project) return;
+      const positions = computeAutoLayout(project, { nodeHeights });
+      const timestamp = now();
+      let moved = 0;
+      const nodes = project.nodes.map((node) => {
+        const next = positions[node.id];
+        if (
+          !next ||
+          (next.x === node.position.x && next.y === node.position.y)
+        ) {
+          return node;
+        }
+        moved += 1;
+        return { ...node, position: next, updatedAt: timestamp };
+      });
+      if (moved === 0) {
+        showToast('The canvas is already arranged.');
+        return;
+      }
+      apply({ ...project, nodes, updatedAt: timestamp });
+      showToast(`Arranged ${moved} node${moved === 1 ? '' : 's'}.`);
     },
 
     deleteNode(id) {

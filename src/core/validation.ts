@@ -12,6 +12,7 @@ import {
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_IMAGES_PER_NODE,
   NODE_TYPES,
+  ROOT_REF,
 } from './types';
 import type {
   ConnectionType,
@@ -19,16 +20,22 @@ import type {
   FlowNode,
   NodeDetails,
   NodeImage,
+  NodeProvenance,
   NodeType,
   Project,
 } from './types';
 
+const MAX_EXTERNAL_KEY_LENGTH = 300;
+const MAX_PROVENANCE_FILES = 100;
+const MAX_PROVENANCE_FILE_LENGTH = 500;
+
 /**
- * v2 added the optional `markdown` field and v3 the `images` array on nodes.
+ * v2 added the optional `markdown` field, v3 the `images` array, and v4 the
+ * optional `externalKey` and `provenance` fields used by terminal/MCP sync.
  * Older backups still import: missing fields are normalized rather than
- * rejected, so v1/v2 files keep working.
+ * rejected, so v1/v2/v3 files keep working.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const BACKUP_FORMAT = 'flow-backup';
 
 export interface BackupFile {
@@ -111,6 +118,72 @@ function normalizeImages(
     add(`${label} has more than ${MAX_IMAGES_PER_NODE} images.`);
   }
   return images;
+}
+
+/** Optional stable identity used by terminal/MCP sync. */
+function normalizeExternalKey(
+  raw: unknown,
+  label: string,
+  add: (message: string) => void,
+): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'string') {
+    add(`${label} has an invalid external key.`);
+    return undefined;
+  }
+  const key = raw.trim();
+  if (!key) return undefined;
+  if (key.length > MAX_EXTERNAL_KEY_LENGTH) {
+    add(`${label} has an external key longer than ${MAX_EXTERNAL_KEY_LENGTH} characters.`);
+    return undefined;
+  }
+  if (/[\u0000-\u001f\u007f]/.test(key)) {
+    add(`${label} has an external key containing control characters.`);
+    return undefined;
+  }
+  if (key === ROOT_REF) {
+    add(`${label} uses the reserved external key "${ROOT_REF}".`);
+    return undefined;
+  }
+  return key;
+}
+
+function normalizeProvenance(
+  raw: unknown,
+  label: string,
+  add: (message: string) => void,
+): NodeProvenance | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isRecord(raw)) {
+    add(`${label} has invalid generation provenance.`);
+    return undefined;
+  }
+  const tool = typeof raw.tool === 'string' ? raw.tool.trim() : '';
+  const at = typeof raw.at === 'string' ? raw.at.trim() : '';
+  if (!tool) add(`${label} has generation provenance without a tool.`);
+  if (!at) add(`${label} has generation provenance without a timestamp.`);
+
+  let sourceFiles: string[] = [];
+  if (raw.sourceFiles !== undefined) {
+    if (!Array.isArray(raw.sourceFiles)) {
+      add(`${label} has an invalid provenance file list.`);
+    } else {
+      sourceFiles = raw.sourceFiles
+        .filter((file): file is string => typeof file === 'string')
+        .map((file) => file.trim())
+        .filter(Boolean)
+        .slice(0, MAX_PROVENANCE_FILES)
+        .map((file) => file.slice(0, MAX_PROVENANCE_FILE_LENGTH));
+    }
+  }
+
+  const commit =
+    typeof raw.commit === 'string' && raw.commit.trim()
+      ? raw.commit.trim().slice(0, 200)
+      : undefined;
+
+  if (!tool || !at) return undefined;
+  return { tool, at, sourceFiles, ...(commit ? { commit } : {}) };
 }
 
 function isNodeType(value: unknown): value is NodeType {
@@ -230,6 +303,9 @@ export function validateBackup(raw: unknown): BackupValidation {
           : null;
       if (!position) add(`${nodeLabel} has invalid canvas coordinates.`);
 
+      const externalKey = normalizeExternalKey(nodeRaw.externalKey, nodeLabel, add);
+      const provenance = normalizeProvenance(nodeRaw.provenance, nodeLabel, add);
+
       if (nodeId && type && title && position) {
         nodes.push({
           id: nodeId,
@@ -242,11 +318,29 @@ export function validateBackup(raw: unknown): BackupValidation {
           images: normalizeImages(nodeRaw.images, nodeLabel, add),
           details: normalizeDetails(nodeRaw.details),
           position,
+          ...(externalKey ? { externalKey } : {}),
+          ...(provenance ? { provenance } : {}),
           createdAt: asString(nodeRaw.createdAt, new Date().toISOString()),
           updatedAt: asString(nodeRaw.updatedAt, new Date().toISOString()),
         });
       }
     });
+
+    // External keys must be unique and must not shadow a node id, otherwise
+    // terminal/MCP references would resolve ambiguously.
+    const externalKeys = new Set<string>();
+    for (const node of nodes) {
+      if (!node.externalKey) continue;
+      if (externalKeys.has(node.externalKey)) {
+        add(`${label}: external key "${node.externalKey}" is used by more than one node.`);
+      }
+      if (nodeIds.has(node.externalKey)) {
+        add(
+          `${label}: external key "${node.externalKey}" collides with a node id.`,
+        );
+      }
+      externalKeys.add(node.externalKey);
+    }
 
     const parentById = new Map(nodes.map((node) => [node.id, node.parentId]));
     for (const node of nodes) {

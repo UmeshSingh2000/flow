@@ -150,6 +150,7 @@ Priority definitions: **MUST** = required for MVP; **SHOULD** = strongly recomme
 - **FR-CAN-09 — SHOULD:** The user should be able to collapse or expand a node's descendants to control visual complexity.
 - **FR-CAN-10 — SHOULD:** The editor should provide a subtle grid or alignment guides to help position nodes.
 - **FR-CAN-11 — MUST:** Canvas interaction controls must not make node editing or connection creation difficult to discover.
+- **FR-CAN-12 — SHOULD:** The user should be able to automatically arrange the canvas into a readable hierarchy-based layout without changing hierarchy, connections, or node content.
 
 ### 7.7 Editor layout
 
@@ -210,6 +211,27 @@ LAN sharing is an optional extension of the MVP available when Flow runs inside 
 - **FR-SHARE-09 — MUST:** Project content must not be persisted on the guest device, sent to a remote service, or written to a database.
 - **FR-SHARE-10 — MUST:** The interface must disclose that the link uses plain HTTP on the local network, that the password controls access but does not encrypt the board, and that sharing should be used only on trusted networks.
 - **FR-SHARE-11 — SHOULD:** The sharer should see the link and password and be able to copy them, and should be warned when no LAN address is detected or when the share has ended.
+
+### 7.12 Terminal and MCP control (VS Code extension)
+
+Terminal control is available only when Flow runs inside the VS Code extension, because a browser webview cannot expose its local database to another process. It must not make editing depend on a server, account, or internet connection.
+
+- **FR-CLI-01 — MUST:** A workspace folder may be linked to one Flow project. Opening Flow in that workspace must open the linked project, creating and linking it on first use.
+- **FR-CLI-02 — MUST:** Workspace links, queued commands, and results must be stored in a per-user application-data directory, never in the user's repository.
+- **FR-CLI-03 — MUST:** The CLI must provide at least: `status`, `list`, `get`, `apply` (with dry run), `open`, `link`, and `result`.
+- **FR-CLI-04 — MUST:** A plan must be validated before it is applied, applied atomically (no partial application on error), and idempotent by stable external node keys. Re-running a plan must update existing nodes rather than duplicate them.
+- **FR-CLI-05 — MUST:** Plans must not delete nodes or projects.
+- **FR-CLI-06 — MUST:** The local transport must be a same-user Unix socket or Windows named pipe in the application-data directory. It must not open a network listener, execute shell commands, or write to the workspace.
+- **FR-CLI-07 — MUST:** Commands that arrive while Flow is not running may be queued in application data and must be reported to the caller as queued, not applied.
+- **FR-CLI-08 — MUST:** Applying must use the same domain validation and persistence path as the UI, and must not report success when persistence failed.
+- **FR-CLI-09 — SHOULD:** Nodes changed by a plan should record provenance (tool, timestamp, source files, optional commit).
+- **FR-CLI-10 — MUST:** An MCP server must expose read and plan-apply tools over stdio, defaulting plan application to a dry run.
+- **FR-CLI-11 — MUST:** Before applying a non-dry-run plan, the extension must write a portable backup of the project outside the repository and keep a bounded history of those backups.
+- **FR-CLI-12 — MUST:** The extension must provide a command that installs the terminal CLI without requiring the user to clone the repository. It must write only outside the repository, keep a stable executable launcher across extension updates, and report missing Node.js or `PATH` requirements.
+- **FR-CLI-13 — MUST:** The extension must provide a command that installs the Claude Code skill and `/flow-help` command into the user's Claude configuration. It must not edit the MCP configuration file directly; registration must go through the official Claude Code CLI and only after an explicit user action.
+- **FR-CLI-14 — SHOULD:** If the terminal CLI is already installed, the extension should refresh the stable copy of the CLI when a new extension version activates.
+- **FR-CLI-15 — MUST:** The extension must provide a one-click setup command that installs the terminal CLI, installs the Claude skill and help command, and registers the MCP server through the official Claude Code CLI when it is available. It must not write into the workspace and must skip, rather than overwrite, files or commands that Flow did not create.
+- **FR-CLI-16 — SHOULD:** On the first Flow: Open in a workspace, the extension should offer the one-click setup once, respect dismissal, and never repeat the offer automatically.
 
 ## 8. Suggested initial node types
 
@@ -327,7 +349,7 @@ The team should verify browser support and storage behavior for the chosen SQLit
 
 ## 13. Architecture requirements for a future VS Code extension
 
-The VS Code extension is not part of the MVP, but the web app must avoid decisions that make future reuse unnecessarily difficult.
+The VS Code extension is now implemented. These requirements keep the web app and shared core portable so the extension and future hosts reuse them rather than fork them.
 
 - **ARCH-01:** Keep project, node, hierarchy, connection, validation, and graph operations in a shared core package or framework-independent modules.
 - **ARCH-02:** Keep persistence behind repository or storage interfaces.
@@ -336,8 +358,9 @@ The VS Code extension is not part of the MVP, but the web app must avoid decisio
 - **ARCH-05:** Use a versioned, portable project data format so projects can move between the web app and extension.
 - **ARCH-06:** Do not assume the browser and VS Code extension share the same physical database file. They should share the data model and import/export format while using platform-appropriate storage adapters.
 - **ARCH-07:** Keep the read-only LAN share server in the extension host (Node), outside shared core and the web app, because browsers cannot accept incoming connections. The guest viewer may reuse the editor's rendering components in a read-only mode but must not depend on the sharer's local store.
+- **ARCH-08:** Keep terminal/MCP transport, application-data paths, workspace linking, and queuing in the extension host and CLI. Shared core may expose pure plan operations, but must not know about sockets, filesystem paths, or VS Code.
 
-Possible future extension capabilities include opening a Flow view in VS Code, associating a Flow project with a workspace, and storing project data locally using SQLite. These capabilities require a separate extension specification.
+The VS Code extension now implements opening a Flow view, linking a project to a workspace, and terminal/MCP control. Native SQLite in the extension remains a future storage option.
 
 ## 14. MVP acceptance criteria
 
@@ -358,6 +381,11 @@ The initial release is acceptable when all of the following can be demonstrated:
 13. A user can export a project backup and import it again without losing its hierarchy, details, node positions, or connections.
 14. The application clearly reports storage, import, or data-validation errors.
 15. No project documentation is sent to a remote server during normal MVP usage.
+16. Opening Flow in a workspace selects the project linked to that workspace, creating and linking one on first use without writing to the repository.
+17. A terminal CLI can read the project and apply a validated, atomic, idempotent documentation plan; re-running the same plan does not duplicate nodes.
+18. An MCP client can discover and call the Flow status/list/get/apply tools over stdio.
+19. A user can install the terminal CLI and Claude integration from inside the extension, without cloning the repository or writing into the workspace.
+20. A user can run one setup command that installs the CLI and Claude integration, registers MCP when Claude Code is available, and links the current workspace.
 
 ## 15. Suggested implementation milestones
 

@@ -16,6 +16,9 @@ export const NODE_TYPES = [
 
 export type NodeType = (typeof NODE_TYPES)[number];
 
+/** Reserved reference that always resolves to the project root node. */
+export const ROOT_REF = '@root';
+
 export const NODE_TYPE_LABELS: Record<NodeType, string> = {
   project: 'Project',
   module: 'Module',
@@ -91,6 +94,21 @@ export const MAX_IMAGES_PER_NODE = 6;
 /** Roughly 3 MB of binary data; larger payloads are rejected on import. */
 export const MAX_IMAGE_DATA_URL_LENGTH = 4_000_000;
 
+/**
+ * Optional record of where generated documentation came from. Set by the
+ * terminal/MCP sync path; absent for nodes written by hand in the editor.
+ */
+export interface NodeProvenance {
+  /** Tool that produced the change, for example "flow-cli". */
+  tool: string;
+  /** ISO timestamp of the generation run. */
+  at: string;
+  /** Repository-relative files the documentation was derived from. */
+  sourceFiles: string[];
+  /** Optional commit the documentation was generated at. */
+  commit?: string;
+}
+
 export interface FlowNode {
   id: string;
   projectId: string;
@@ -104,6 +122,14 @@ export interface FlowNode {
   images: NodeImage[];
   details: NodeDetails;
   position: Point;
+  /**
+   * Stable external identity used by the terminal/MCP sync path. Unlike `id`,
+   * it is chosen by the caller (for example `module/auth/login`) and lets a
+   * repeated plan update the same node instead of creating a duplicate.
+   */
+  externalKey?: string;
+  /** Where generated documentation came from, when it was not hand-written. */
+  provenance?: NodeProvenance;
   createdAt: string;
   updatedAt: string;
 }
