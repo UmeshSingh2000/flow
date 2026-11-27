@@ -41,7 +41,8 @@ export function buildTreeRows(
     for (const node of project.nodes) {
       if (
         node.title.toLowerCase().includes(query) ||
-        node.description.toLowerCase().includes(query)
+        node.description.toLowerCase().includes(query) ||
+        node.id.toLowerCase().includes(query)
       ) {
         allowed.add(node.id);
         for (const ancestorId of getAncestorIds(project, node.id)) {

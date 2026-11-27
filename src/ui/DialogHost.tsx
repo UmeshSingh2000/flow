@@ -154,8 +154,9 @@ function DeleteProjectDialog({
         <p>
           This permanently removes {project.nodes.length} node
           {project.nodes.length === 1 ? '' : 's'} and {project.connections.length}{' '}
-          connection{project.connections.length === 1 ? '' : 's'} from this device. Export
-          a backup first if you may need it later.
+          connection{project.connections.length === 1 ? '' : 's'} from this device. You
+          can undo this for 10 seconds after deleting. Export a backup first if you may
+          need it later.
         </p>
       </header>
       <footer className="dialog-actions">
@@ -213,7 +214,8 @@ function DeleteNodeDialog({
             ? `${affectedConnections} connection${
                 affectedConnections === 1 ? '' : 's'
               } touching these nodes will be removed.`
-            : 'No connections touch this node.'}
+            : 'No connections touch this node.'}{' '}
+          You can undo this for 10 seconds.
         </p>
       </header>
       <footer className="dialog-actions">

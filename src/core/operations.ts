@@ -80,12 +80,21 @@ export interface ApplyPlanSummary {
   connected: number;
 }
 
+/** A node the plan created, with the stable id callers should reuse. */
+export interface CreatedNodeRef {
+  key?: string;
+  nodeId: string;
+  title?: string;
+}
+
 export interface ApplyPlanResult {
   ok: boolean;
   dryRun: boolean;
   errors: string[];
   changes: OperationChange[];
   summary: ApplyPlanSummary;
+  /** Created nodes only, in plan order, with their assigned node ids. */
+  createdNodes: CreatedNodeRef[];
   /** The simulated or applied project. Callers should not send it to the UI. */
   project?: Project;
 }
@@ -603,6 +612,7 @@ function fail(
     errors,
     changes: [],
     summary: emptySummary(),
+    createdNodes: [],
   };
 }
 
@@ -920,12 +930,26 @@ export function applyPlan(project: Project, input: ApplyPlanInput): ApplyPlanRes
 
   changes.sort((a, b) => a.op - b.op);
 
+  const createdNodes: CreatedNodeRef[] = changes
+    .filter(
+      (change) =>
+        change.action === 'created' &&
+        change.operation === 'upsert-node' &&
+        typeof change.nodeId === 'string',
+    )
+    .map((change) => ({
+      ...(change.key ? { key: change.key } : {}),
+      nodeId: change.nodeId as string,
+      ...(change.title ? { title: change.title } : {}),
+    }));
+
   return {
     ok: true,
     dryRun,
     errors: [],
     changes,
     summary: summarize(changes),
+    createdNodes,
     project: current,
   };
 }

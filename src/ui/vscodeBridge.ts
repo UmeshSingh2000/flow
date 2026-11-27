@@ -60,6 +60,96 @@ export function subscribeHostMessages(
   return () => window.removeEventListener('message', listener);
 }
 
+/**
+ * Ask the extension host to open Flow's application-data folder in the OS file
+ * manager. Returns false outside VS Code, where there is no folder to open.
+ */
+export function openDataFolder(): boolean {
+  const api = getVsCodeApi();
+  if (!api) return false;
+  api.postMessage({ type: 'flow:openDataFolder' });
+  return true;
+}
+
+interface PendingSourceRequest {
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const pendingSourceRequests = new Map<string, PendingSourceRequest>();
+let sourceRequestCounter = 0;
+let sourceRequestListenerInstalled = false;
+
+function ensureSourceRequestListener(): void {
+  if (sourceRequestListenerInstalled) return;
+  sourceRequestListenerInstalled = true;
+  subscribeHostMessages((data) => {
+    if (data.type !== 'flow:openSourceResult') return;
+    const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+    const pending = pendingSourceRequests.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingSourceRequests.delete(requestId);
+    if (data.ok !== true) {
+      const message =
+        typeof data.error === 'string' && data.error
+          ? data.error
+          : 'Could not open the source file.';
+      useFlowStore.getState().notify(message, 'error');
+    }
+  });
+}
+
+/**
+ * Ask the extension host to open a workspace-relative source file and select
+ * the given 1-based line range. Does nothing outside VS Code.
+ *
+ * The host acknowledges with `flow:openSourceResult`. A missing response means
+ * the running extension host is older than the webview (a window reload is
+ * needed), so the user gets an explicit message instead of a silent failure.
+ */
+export function openSourceFile(
+  sourcePath: string,
+  startLine?: number,
+  endLine?: number,
+): void {
+  const api = getVsCodeApi();
+  if (!api) return;
+  ensureSourceRequestListener();
+  sourceRequestCounter += 1;
+  const requestId = `src_${Date.now().toString(36)}_${sourceRequestCounter}`;
+  const timer = setTimeout(() => {
+    pendingSourceRequests.delete(requestId);
+    useFlowStore
+      .getState()
+      .notify(
+        'The Flow extension host did not respond. Reload the VS Code window and try again.',
+        'error',
+      );
+  }, 3000);
+  pendingSourceRequests.set(requestId, { timer });
+  api.postMessage({
+    type: 'flow:openSourceFile',
+    requestId,
+    path: sourcePath,
+    ...(typeof startLine === 'number' ? { startLine } : {}),
+    ...(typeof endLine === 'number' ? { endLine } : {}),
+  });
+}
+
+/** Copy text with the host clipboard inside VS Code, or the browser clipboard. */
+export async function copyText(text: string): Promise<void> {
+  const api = getVsCodeApi();
+  if (api) {
+    api.postMessage({ type: 'flow:copyText', text });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    /* Clipboard access was denied; the value stays selectable. */
+  }
+}
+
 export function initThemeBridge(): void {
   const api = getVsCodeApi();
   if (!api) return; // plain browser: localStorage path already handles this.
@@ -205,8 +295,11 @@ function listResult(payload: Record<string, unknown>) {
 function getResult(payload: Record<string, unknown>) {
   const project = projectFor(payload.projectId);
   if (!project) return { ok: false as const, errors: ['No Flow project is open.'] };
-  const ref = payload.ref ?? payload.externalKey ?? payload.id ?? ROOT_REF;
-  const node = resolveNode(project, ref);
+  const nodeId = typeof payload.nodeId === 'string' ? payload.nodeId.trim() : '';
+  const ref = nodeId || payload.ref || payload.externalKey || payload.id || ROOT_REF;
+  const node = nodeId
+    ? project.nodes.find((candidate) => candidate.id === nodeId)
+    : resolveNode(project, ref);
   if (!node) {
     return { ok: false as const, errors: [`No node matches "${String(ref)}".`] };
   }

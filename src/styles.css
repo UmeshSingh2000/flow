@@ -608,6 +608,29 @@ select {
   line-height: 1.45;
 }
 
+/* Terminal tools were refreshed by the extension host; prompt for a restart. */
+.update-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.update-note p {
+  flex: 1;
+  margin: 0;
+  color: inherit;
+}
+
+.update-note .icon-btn {
+  flex: none;
+}
+
 /* ---------------------------------------------------------------- menus */
 
 .menu-anchor {
@@ -691,6 +714,43 @@ select {
   min-width: 228px;
 }
 
+/* Node context menu, positioned at the pointer. */
+.canvas-menu {
+  position: fixed;
+  top: auto;
+  right: auto;
+  z-index: 95;
+  min-width: 208px;
+}
+
+.canvas-menu-head {
+  max-width: 216px;
+  padding: 6px 8px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.canvas-menu-head p {
+  margin: 4px 0 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-menu-id {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menu-section {
   display: flex;
   flex-direction: column;
@@ -702,6 +762,24 @@ select {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.storage-figure {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 3px 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.storage-figure-value {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------------------------------------------------------------- canvas */
@@ -1140,6 +1218,68 @@ select {
   min-height: 0;
 }
 
+.canvas-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+.canvas-tool {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.canvas-tool:hover {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.canvas-tool.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.canvas-tool:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 1px;
+}
+
+.canvas-surface.tool-pan .react-flow__pane {
+  cursor: grab;
+}
+
+.canvas-surface.tool-pan .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+
+.canvas-surface.tool-zoom .react-flow__pane,
+.canvas-surface.tool-zoom .react-flow__node {
+  cursor: zoom-in;
+}
+
+.canvas-surface.tool-zoom .node-card {
+  cursor: inherit;
+}
+
 .flow-canvas {
   background: var(--bg);
 }
@@ -1308,6 +1448,62 @@ select {
   line-height: 1.4;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* Node identity is metadata: quiet by default, easy to copy on demand. */
+.node-id {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 7px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: copy;
+}
+
+.node-id:hover,
+.node-id:focus-visible {
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.node-id:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+.node-id-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-id-static {
+  cursor: text;
+  user-select: text;
+}
+
+.node-id-static:hover {
+  background: transparent;
+  color: var(--faint);
+}
+
+.node-id-icon {
+  flex: none;
+  opacity: 0;
+}
+
+.node-id:hover .node-id-icon,
+.node-id:focus-visible .node-id-icon {
+  opacity: 1;
 }
 
 .react-flow__handle.node-handle {
@@ -1588,6 +1784,37 @@ select {
   color: var(--faint);
   font-size: 10.5px;
   line-height: 1.5;
+}
+
+.hint code,
+.node-id-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.node-id-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-id-value {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.node-id-row .icon-btn {
+  flex: none;
 }
 
 .docs-section {
@@ -2307,6 +2534,113 @@ select {
   border-radius: 6px;
 }
 
+/* Annotated code fence: header links to the source file and line range. */
+.md-source {
+  margin: 0 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.md-source-open {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 9px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.md-source-open:hover {
+  color: var(--accent);
+}
+
+.md-source-open:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: -2px;
+}
+
+.md-source-file {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-source-range {
+  flex: none;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+}
+
+.md-source-action {
+  flex: none;
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.md-source pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Provenance source files in the node details panel. */
+.source-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-link {
+  display: block;
+  width: 100%;
+  padding: 5px 7px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.source-link:hover {
+  border-color: var(--accent);
+}
+
+.source-link:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 1px;
+}
+
+.source-link.is-static {
+  color: var(--muted);
+  cursor: default;
+}
+
 /* Full-screen Markdown workspace */
 
 .markdown-sheet {
@@ -2610,6 +2944,9 @@ select {
   bottom: 26px;
   left: 50%;
   z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   max-width: 80vw;
   padding: 9px 14px;
   transform: translateX(-50%);
@@ -2623,6 +2960,27 @@ select {
 
 .toast.is-error {
   background: #b91c1c;
+}
+
+.toast-action {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.toast-action:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.75);
+  outline-offset: 1px;
 }
 
 @keyframes toast-in {

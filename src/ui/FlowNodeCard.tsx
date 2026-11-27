@@ -3,7 +3,8 @@ import type { Node, NodeProps } from '@xyflow/react';
 import { NODE_TYPE_LABELS } from '../core/types';
 import type { FlowNode } from '../core/types';
 import { useFlowStore } from '../state/store';
-import { IconTrash } from './icons';
+import { IconCopy, IconTrash } from './icons';
+import { copyText } from './vscodeBridge';
 
 export type FlowCanvasNode = Node<{ node: FlowNode; readOnly?: boolean }, 'flow'>;
 
@@ -22,6 +23,7 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCa
   const readOnly = data.readOnly === true;
   const hasDocs = Object.values(node.details).some((value) => value.trim().length > 0);
   const openDialog = useFlowStore((state) => state.openDialog);
+  const notify = useFlowStore((state) => state.notify);
   const isRoot = useFlowStore((state) => {
     const project = state.projects.find(
       (candidate) => candidate.id === state.activeProjectId,
@@ -65,6 +67,27 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<FlowCa
             <span className="node-image-count">+{node.images.length - 1}</span>
           )}
         </div>
+      )}
+      {readOnly ? (
+        <div className="node-id node-id-static" title={node.id}>
+          <span className="node-id-text">{node.id}</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="nodrag nopan node-id"
+          title={`Copy node ID: ${node.id}`}
+          aria-label={`Copy node ID ${node.id}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            void copyText(node.id);
+            notify('Node ID copied.');
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span className="node-id-text">{node.id}</span>
+          <IconCopy size={10} className="node-id-icon" />
+        </button>
       )}
       {!readOnly && !isRoot && (
         <button

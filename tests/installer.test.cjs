@@ -156,17 +156,35 @@ test('refreshes an installed CLI copy after an extension update', () => {
     homedir: home,
     extensionPath: REPO_ROOT,
     appDataDir: appData,
+    version: '0.1.0',
   });
   assert.equal(result.ok, true);
 
   const copied = path.join(appData, 'tools', 'cli', 'flow.mjs');
   fs.writeFileSync(copied, 'BROKEN');
+  const repoVersion = JSON.parse(
+    fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'),
+  ).version;
   const refresh = installer.refreshCliTools({
     extensionPath: REPO_ROOT,
     appDataDir: appData,
   });
   assert.equal(refresh.refreshed, true);
+  assert.equal(refresh.updated, true);
+  assert.equal(refresh.fromVersion, '0.1.0');
+  assert.equal(refresh.toVersion, repoVersion);
   assert.notEqual(fs.readFileSync(copied, 'utf8'), 'BROKEN');
+  const toolsPackage = JSON.parse(
+    fs.readFileSync(path.join(appData, 'tools', 'package.json'), 'utf8'),
+  );
+  assert.equal(toolsPackage.version, repoVersion);
+
+  const unchanged = installer.refreshCliTools({
+    extensionPath: REPO_ROOT,
+    appDataDir: appData,
+  });
+  assert.equal(unchanged.refreshed, true);
+  assert.equal(unchanged.updated, false);
 
   assert.equal(
     installer.refreshCliTools({

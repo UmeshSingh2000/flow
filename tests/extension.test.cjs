@@ -81,6 +81,9 @@ test('extension host links the workspace and routes commands to the webview', as
 
   const commands = new Map();
   const sentToWebview = [];
+  const openedFolders = [];
+  const openedSources = [];
+  const errorMessages = [];
   let webviewHandler = null;
 
   const panel = {
@@ -152,19 +155,41 @@ test('extension host links the workspace and routes commands to the webview', as
   };
 
   const vscodeMock = {
-    ViewColumn: { One: 1 },
+    ViewColumn: { One: 1, Active: -1 },
     ColorThemeKind: { Light: 1, HighContrastLight: 2, Dark: 3 },
+    Position: class Position {
+      constructor(line, character) {
+        this.line = line;
+        this.character = character;
+      }
+    },
+    Range: class Range {
+      constructor(start, end) {
+        this.start = start;
+        this.end = end;
+      }
+    },
     Uri: {
+      file(fsPath) {
+        return { fsPath };
+      },
       joinPath(base, ...parts) {
         return { fsPath: [base && base.fsPath, ...parts].filter(Boolean).join('/') };
       },
     },
-    env: { clipboard: { writeText: async () => {} } },
+    env: {
+      clipboard: { writeText: async () => {} },
+      openExternal: async (uri) => {
+        openedFolders.push(uri.fsPath);
+        return true;
+      },
+    },
     commands: {
       registerCommand(name, handler) {
         commands.set(name, handler);
         return { dispose() {} };
       },
+      executeCommand: async () => undefined,
     },
     window: {
       activeColorTheme: { kind: 3 },
@@ -184,10 +209,27 @@ test('extension host links the workspace and routes commands to the webview', as
       },
       showInformationMessage: async () => undefined,
       showWarningMessage: async () => undefined,
-      showErrorMessage: () => undefined,
+      showErrorMessage: (message) => {
+        errorMessages.push(String(message));
+      },
+      showTextDocument: async (document, options) => {
+        openedSources.push({ document, options });
+        return {};
+      },
     },
     workspace: {
       workspaceFolders: [{ uri: { fsPath: workspace } }],
+      openTextDocument: async (uri) => {
+        const content = fs.readFileSync(uri.fsPath, 'utf8');
+        const lines = content.split('\n');
+        return {
+          uri,
+          lineCount: lines.length,
+          lineAt(index) {
+            return { range: { end: { line: index, character: lines[index].length } } };
+          },
+        };
+      },
     },
   };
 
@@ -220,9 +262,50 @@ test('extension host links the workspace and routes commands to the webview', as
     }
   });
 
+  // An installed (older) stable CLI copy means activation refreshes it, and
+  // the webview bootstrap must surface the update so users restart Claude Code.
+  fs.writeFileSync(
+    path.join(extensionPath, 'package.json'),
+    JSON.stringify({ name: 'flow-test', version: '9.9.9' }),
+  );
+  fs.mkdirSync(path.join(extensionPath, 'cli'), { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, 'cli', 'flow.mjs'), '// bundled cli');
+  fs.mkdirSync(path.join(extensionPath, 'src', 'extension'), { recursive: true });
+  fs.writeFileSync(
+    path.join(extensionPath, 'src', 'extension', 'protocol.cjs'),
+    '// bundled protocol',
+  );
+  fs.writeFileSync(
+    path.join(extensionPath, 'src', 'extension', 'claudeIntegration.cjs'),
+    '// bundled skill',
+  );
+  fs.mkdirSync(path.join(dataDir, 'tools', 'cli'), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'tools', 'cli', 'flow.mjs'), '// old copy');
+  fs.writeFileSync(
+    path.join(dataDir, 'tools', 'package.json'),
+    JSON.stringify({ name: 'flow-docs-cli', version: '0.0.1' }),
+  );
+
   extension.activate(context);
   assert.ok(commands.has('flow.open'));
+  assert.ok(commands.has('flow.openDataFolder'));
   assert.ok(commands.has('flow.linkWorkspace'));
+  assert.ok(commands.has('flow.installCli'));
+  assert.ok(commands.has('flow.installClaudeIntegration'));
+  assert.ok(commands.has('flow.setupEverything'));
+
+  // An installed (older) stable CLI copy means activation refreshed it and
+  // the webview bootstrap must surface the update so users restart Claude Code.
+  fs.writeFileSync(
+    path.join(extensionPath, 'package.json'),
+    JSON.stringify({ name: 'flow-test', version: '9.9.9' }),
+  );
+  fs.mkdirSync(path.join(dataDir, 'tools', 'cli'), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'tools', 'cli', 'flow.mjs'), '// old copy');
+  fs.writeFileSync(
+    path.join(dataDir, 'tools', 'package.json'),
+    JSON.stringify({ name: 'flow-docs-cli', version: '0.0.1' }),
+  );
   assert.ok(commands.has('flow.installCli'));
   assert.ok(commands.has('flow.installClaudeIntegration'));
   assert.ok(commands.has('flow.setupEverything'));
@@ -242,6 +325,60 @@ test('extension host links the workspace and routes commands to the webview', as
 
   const entry = protocol.getWorkspaceEntry(dataDir, key);
   assert.equal(entry.projectId, 'p_test');
+
+  // The Settings item posts this message; the host reveals the app-data dir.
+  await webviewHandler({ type: 'flow:openDataFolder' });
+  assert.deepEqual(openedFolders, [dataDir]);
+
+  // Annotated Markdown code fences ask the host to open the file and select
+  // the referenced lines. Paths are confined to the workspace.
+  fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'src', 'example.ts'), 'one\ntwo\nthree\n');
+  await webviewHandler({
+    type: 'flow:openSourceFile',
+    requestId: 'src_1',
+    path: 'src/example.ts',
+    startLine: 2,
+    endLine: 3,
+  });
+  await waitFor(() => openedSources.length === 1);
+  assert.equal(
+    openedSources[0].document.uri.fsPath,
+    fs.realpathSync(path.join(workspace, 'src', 'example.ts')),
+  );
+  assert.equal(openedSources[0].options.selection.start.line, 1);
+  assert.equal(openedSources[0].options.selection.start.character, 0);
+  assert.equal(openedSources[0].options.selection.end.line, 2);
+  assert.equal(openedSources[0].options.preview, false);
+  await waitFor(() =>
+    sentToWebview.some(
+      (entry) => entry.type === 'flow:openSourceResult' && entry.requestId === 'src_1',
+    ),
+  );
+  assert.deepEqual(
+    sentToWebview.find(
+      (entry) => entry.type === 'flow:openSourceResult' && entry.requestId === 'src_1',
+    ),
+    { type: 'flow:openSourceResult', requestId: 'src_1', ok: true },
+  );
+
+  await webviewHandler({
+    type: 'flow:openSourceFile',
+    requestId: 'src_2',
+    path: '../../etc/passwd',
+  });
+  await waitFor(() =>
+    sentToWebview.some(
+      (entry) => entry.type === 'flow:openSourceResult' && entry.requestId === 'src_2',
+    ),
+  );
+  const denied = sentToWebview.find(
+    (entry) => entry.type === 'flow:openSourceResult' && entry.requestId === 'src_2',
+  );
+  assert.ok(denied);
+  assert.equal(denied.ok, false);
+  assert.match(denied.error, /outside the workspace/i);
+  assert.equal(openedSources.length, 1);
 
   const apply = await sendRequest(socketPath, {
     id: 'req_apply',
@@ -276,4 +413,5 @@ test('extension host links the workspace and routes commands to the webview', as
   const bootstrapScript = panel.webview.html;
   assert.match(bootstrapScript, /__FLOW_WORKSPACE__/);
   assert.match(bootstrapScript, /"workspaceName":"/);
+  assert.match(bootstrapScript, /"cliUpdate":\{"version":"9\.9\.9"\}/);
 });

@@ -11,6 +11,7 @@ import {
   deleteConnection as removeConnection,
   deleteNode as removeNode,
   duplicateNode as duplicateNodeInProject,
+  getAncestorIds,
   getNode,
   getRootNode,
   moveNode as moveNodeInProject,
@@ -25,6 +26,7 @@ import { computeAutoLayout } from '../core/layout';
 import {
   applyPlan,
   type ApplyPlanSummary,
+  type CreatedNodeRef,
   type OperationChange,
 } from '../core/operations';
 import { buildBackup, parseBackup } from '../core/validation';
@@ -62,6 +64,8 @@ const THEME_KEY = 'flow-theme';
 export interface ThemeBootstrap {
   theme: Theme | null;
   hostTheme: Theme;
+  /** Set when activation refreshed the stable CLI copy to a new version. */
+  cliUpdate?: { version: string } | null;
 }
 
 /**
@@ -94,6 +98,8 @@ export interface ExternalPlanResult {
   errors: string[];
   changes: OperationChange[];
   summary: ApplyPlanSummary;
+  /** Created nodes with their assigned ids; empty on failure. */
+  createdNodes: CreatedNodeRef[];
   projectId: string | null;
 }
 
@@ -131,6 +137,18 @@ function readBootstrap(): ThemeBootstrap | null {
 export function hasExplicitTheme(): boolean {
   const boot = readBootstrap();
   return boot ? boot.theme !== null : false;
+}
+
+/**
+ * Version of the terminal CLI/MCP tools that activation just installed into
+ * the stable copy, when that copy changed. Null outside VS Code or when the
+ * installed copy already matched this extension version.
+ */
+function readCliUpdateVersion(): string | null {
+  const update = readBootstrap()?.cliUpdate;
+  if (!update || typeof update !== 'object') return null;
+  const version = (update as { version?: unknown }).version;
+  return typeof version === 'string' && version.trim() ? version.trim() : null;
 }
 
 export function readTheme(): Theme {
@@ -185,10 +203,17 @@ export type DialogState =
   | { kind: 'import-errors'; errors: string[] }
   | { kind: 'info'; title: string; body: string };
 
+export interface ToastAction {
+  label: string;
+  run(): void;
+}
+
 export interface ToastState {
   id: number;
   message: string;
   tone: Tone;
+  /** Optional button, used for the destructive-action undo window. */
+  action?: ToastAction;
 }
 
 /** Where the user dropped a connector on empty canvas, in screen and flow coordinates. */
@@ -270,6 +295,9 @@ export interface FlowStore {
   requestFocus(nodeId: string): void;
   sidebarOpen: boolean;
   toggleSidebar(): void;
+  /** Version of the terminal tools freshly installed by the extension host. */
+  cliUpdateVersion: string | null;
+  dismissCliUpdate(): void;
   setSidebarOpen(open: boolean): void;
 
   /** Whether the bottom command palette is open. */
@@ -280,6 +308,8 @@ export interface FlowStore {
   openDialog(dialog: DialogState): void;
   closeDialog(): void;
   notify(message: string, tone?: Tone): void;
+  /** Runs the toast's action button, if any, and closes the toast. */
+  runToastAction(): void;
 
   openConnectionMenu(menu: ConnectionMenuState): void;
   closeConnectionMenu(): void;
@@ -353,17 +383,26 @@ function scheduleSave(project: Project): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
-function showToast(message: string, tone: Tone = 'info'): void {
+function showToast(
+  message: string,
+  tone: Tone = 'info',
+  options: { action?: ToastAction; durationMs?: number } = {},
+): void {
   toastCounter += 1;
   const id = toastCounter;
-  useFlowStore.setState({ toast: { id, message, tone } });
+  useFlowStore.setState({
+    toast: { id, message, tone, ...(options.action ? { action: options.action } : {}) },
+  });
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     if (useFlowStore.getState().toast?.id === id) {
       useFlowStore.setState({ toast: null });
     }
-  }, 4500);
+  }, options.durationMs ?? 4500);
 }
+
+/** How long a destructive change can be undone from its toast. */
+const UNDO_WINDOW_MS = 10_000;
 
 function allNodesExpanded(projects: Project[]): Record<string, boolean> {
   const expanded: Record<string, boolean> = {};
@@ -439,6 +478,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     view: readView(),
     sidebarOpen: true,
     commandPaletteOpen: false,
+    cliUpdateVersion: readCliUpdateVersion(),
 
     async init() {
       if (get().status === 'ready' || initializing) return;
@@ -531,6 +571,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         errors,
         changes: [],
         summary: emptyPlanSummary(),
+        createdNodes: [],
         projectId: state.activeProjectId,
       });
 
@@ -562,6 +603,7 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
         errors: result.errors,
         changes: result.changes,
         summary: result.summary,
+        createdNodes: result.createdNodes,
         projectId: project.id,
       };
       if (!result.ok || result.dryRun || !result.project) return outcome;
@@ -577,15 +619,9 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       }
       apply(result.project);
 
-      const createdIds = result.changes
-        .filter(
-          (change) =>
-            change.action === 'created' &&
-            change.operation === 'upsert-node' &&
-            typeof change.nodeId === 'string',
-        )
-        .map((change) => change.nodeId as string);
-      if (createdIds.length > 0) expand(createdIds);
+      if (result.createdNodes.length > 0) {
+        expand(result.createdNodes.map((node) => node.nodeId));
+      }
 
       const parts: string[] = [];
       if (result.summary.created > 0) parts.push(`${result.summary.created} added`);
@@ -635,9 +671,13 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
 
     async deleteProject(id) {
       const state = get();
+      const removedProject = state.projects.find((project) => project.id === id);
+      if (!removedProject) return;
+      const removedIndex = state.projects.findIndex((project) => project.id === id);
+      const wasActive = state.activeProjectId === id;
       const remaining = state.projects.filter((project) => project.id !== id);
       const activeProjectId =
-        state.activeProjectId === id ? (remaining[0]?.id ?? null) : state.activeProjectId;
+        wasActive ? (remaining[0]?.id ?? null) : state.activeProjectId;
       set({
         projects: remaining,
         activeProjectId,
@@ -653,7 +693,35 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
       } catch {
         set({ saveState: 'error' });
       }
-      showToast('Project deleted.');
+      showToast('Project deleted.', 'info', {
+        durationMs: UNDO_WINDOW_MS,
+        action: {
+          label: 'Undo',
+          run: () => {
+            const current = get();
+            if (current.projects.some((project) => project.id === removedProject.id)) {
+              showToast('That project is already present.');
+              return;
+            }
+            const projects = [...current.projects];
+            projects.splice(Math.min(removedIndex, projects.length), 0, removedProject);
+            const nextActive = wasActive ? removedProject.id : current.activeProjectId;
+            set({
+              projects,
+              activeProjectId: nextActive,
+              selectedNodeId: null,
+              selectedConnectionId: null,
+              expandedIds: {
+                ...current.expandedIds,
+                ...allNodesExpanded([removedProject]),
+              },
+            });
+            scheduleSave(removedProject);
+            void adapter?.saveActiveProjectId(nextActive);
+            showToast(`Restored “${removedProject.name}”.`);
+          },
+        },
+      });
     },
 
     selectProject(id) {
@@ -791,12 +859,90 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
           selectedConnectionId: null,
         };
       });
+      const removedNodes = result.removedNodes;
+      const removedConnections = result.removedConnections;
       showToast(
         result.removedIds.length > 1
           ? `Node deleted with ${result.removedIds.length - 1} descendant${
               result.removedIds.length - 1 === 1 ? '' : 's'
             }.`
           : 'Node deleted.',
+        'info',
+        {
+          durationMs: UNDO_WINDOW_MS,
+          action: {
+            label: 'Undo',
+            run: () => {
+              const current = get().projects.find(
+                (candidate) => candidate.id === project.id,
+              );
+              if (!current) {
+                showToast('That project no longer exists.', 'error');
+                return;
+              }
+              const existingNodeIds = new Set(current.nodes.map((node) => node.id));
+              if (existingNodeIds.has(id)) {
+                showToast('That node is already present.');
+                return;
+              }
+              const root = removedNodes.find((candidate) => candidate.id === id);
+              if (root?.parentId && !existingNodeIds.has(root.parentId)) {
+                showToast('The parent node was also deleted.', 'error');
+                return;
+              }
+              const restoredNodes = removedNodes.filter(
+                (candidate) => !existingNodeIds.has(candidate.id),
+              );
+              if (restoredNodes.length === 0) {
+                showToast('That node is already present.');
+                return;
+              }
+              const allNodeIds = new Set([
+                ...existingNodeIds,
+                ...restoredNodes.map((candidate) => candidate.id),
+              ]);
+              const existingConnectionIds = new Set(
+                current.connections.map((connection) => connection.id),
+              );
+              const restoredConnections = removedConnections.filter(
+                (connection) =>
+                  !existingConnectionIds.has(connection.id) &&
+                  allNodeIds.has(connection.source) &&
+                  allNodeIds.has(connection.target) &&
+                  !current.connections.some(
+                    (existing) =>
+                      existing.source === connection.source &&
+                      existing.target === connection.target,
+                  ),
+              );
+              const restoredProject: Project = {
+                ...current,
+                nodes: [...current.nodes, ...restoredNodes],
+                connections: [...current.connections, ...restoredConnections],
+                updatedAt: now(),
+              };
+              apply(restoredProject);
+              const expandedIds = { ...get().expandedIds };
+              for (const ancestorId of getAncestorIds(restoredProject, id)) {
+                expandedIds[ancestorId] = true;
+              }
+              for (const restored of restoredNodes) expandedIds[restored.id] = true;
+              set({
+                expandedIds,
+                selectedNodeId: id,
+                selectedConnectionId: null,
+              });
+              const title = root?.title ?? 'node';
+              showToast(
+                restoredNodes.length > 1
+                  ? `Restored “${title}” and ${restoredNodes.length - 1} descendant${
+                      restoredNodes.length - 1 === 1 ? '' : 's'
+                    }.`
+                  : `Restored “${title}”.`,
+              );
+            },
+          },
+        },
       );
       return { ok: true };
     },
@@ -847,11 +993,50 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
     deleteConnection(id) {
       const project = active();
       if (!project) return;
+      const removed = project.connections.find((connection) => connection.id === id);
       apply(removeConnection(project, id));
       set((state) => ({
         selectedConnectionId: state.selectedConnectionId === id ? null : state.selectedConnectionId,
       }));
-      showToast('Connection deleted.');
+      showToast('Connection deleted.', 'info', {
+        durationMs: UNDO_WINDOW_MS,
+        ...(removed
+          ? {
+              action: {
+                label: 'Undo',
+                run: () => {
+                  const current = get().projects.find(
+                    (candidate) => candidate.id === removed.projectId,
+                  );
+                  if (!current) return;
+                  const nodeIds = new Set(current.nodes.map((node) => node.id));
+                  if (
+                    current.connections.some(
+                      (connection) => connection.id === removed.id,
+                    ) ||
+                    current.connections.some(
+                      (connection) =>
+                        connection.source === removed.source &&
+                        connection.target === removed.target,
+                    ) ||
+                    !nodeIds.has(removed.source) ||
+                    !nodeIds.has(removed.target)
+                  ) {
+                    showToast('That connection can no longer be restored.', 'error');
+                    return;
+                  }
+                  apply({
+                    ...current,
+                    connections: [...current.connections, removed],
+                    updatedAt: now(),
+                  });
+                  set({ selectedConnectionId: removed.id, selectedNodeId: null });
+                  showToast('Connection restored.');
+                },
+              },
+            }
+          : {}),
+      });
     },
 
     toggleExpanded(id) {
@@ -870,6 +1055,10 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
 
     requestFocus(nodeId) {
       set({ focusRequest: { nodeId, nonce: ++focusCounter } });
+    },
+
+    dismissCliUpdate() {
+      set({ cliUpdateVersion: null });
     },
 
     toggleSidebar() {
@@ -1036,6 +1225,18 @@ export const useFlowStore = create<FlowStore>()((set, get) => {
 
     notify(message, tone = 'info') {
       showToast(message, tone);
+    },
+
+    runToastAction() {
+      const toast = get().toast;
+      if (!toast?.action) return;
+      const action = toast.action;
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = null;
+      }
+      set({ toast: null });
+      action.run();
     },
 
     exportBackup(scope) {

@@ -398,6 +398,9 @@ export interface DeleteNodeResult {
   ok: true;
   project: Project;
   removedIds: string[];
+  /** Removed nodes and touching edges, captured so the UI can offer undo. */
+  removedNodes: FlowNode[];
+  removedConnections: FlowConnection[];
 }
 
 export function deleteNode(project: Project, nodeId: string): DeleteNodeResult | {
@@ -415,9 +418,14 @@ export function deleteNode(project: Project, nodeId: string): DeleteNodeResult |
   }
   const removedIds = [nodeId, ...getDescendantIds(project, nodeId)];
   const removed = new Set(removedIds);
+  const removedConnections = project.connections.filter(
+    (connection) => removed.has(connection.source) || removed.has(connection.target),
+  );
   return {
     ok: true,
     removedIds,
+    removedNodes: project.nodes.filter((candidate) => removed.has(candidate.id)),
+    removedConnections,
     project: {
       ...project,
       nodes: project.nodes.filter((candidate) => !removed.has(candidate.id)),

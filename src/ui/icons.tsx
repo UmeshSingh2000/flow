@@ -113,6 +113,14 @@ export function IconImage(props: IconProps) {
   );
 }
 
+export function IconFolder(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="M2 4.4A1.4 1.4 0 0 1 3.4 3h2.3l1.3 1.6h5.6A1.4 1.4 0 0 1 14 6v5.6a1.4 1.4 0 0 1-1.4 1.4H3.4A1.4 1.4 0 0 1 2 11.6z" />
+    </svg>
+  );
+}
+
 export function IconSettings(props: IconProps) {
   return (
     <svg {...iconProps(props)}>
@@ -127,6 +135,33 @@ export function IconPanelLeft(props: IconProps) {
     <svg {...iconProps(props)}>
       <rect x="2.5" y="3" width="11" height="10" rx="1.6" />
       <path d="M6.5 3v10" />
+    </svg>
+  );
+}
+
+export function IconCursor(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="M3.4 2.4l9 4.9-3.9 1.1-1.2 4.1z" />
+    </svg>
+  );
+}
+
+export function IconHand(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="M5.4 8V4.1a1.1 1.1 0 0 1 2.2 0V7" />
+      <path d="M7.6 7V3.3a1.1 1.1 0 0 1 2.2 0V7" />
+      <path d="M9.8 7V4.3a1.1 1.1 0 0 1 2.2 0v4.9a4.2 4.2 0 0 1-4.2 4.2H7a3.6 3.6 0 0 1-2.7-1.2L2.1 9.4a1.1 1.1 0 0 1 1.7-1.4l1.6 1.6" />
+    </svg>
+  );
+}
+
+export function IconZoom(props: IconProps) {
+  return (
+    <svg {...iconProps(props)}>
+      <circle cx="6.8" cy="6.8" r="4.3" />
+      <path d="M10 10l3.6 3.6M4.9 6.8h3.8M6.8 4.9v3.8" />
     </svg>
   );
 }

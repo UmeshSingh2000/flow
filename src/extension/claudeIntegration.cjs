@@ -38,13 +38,20 @@ decisions) with hierarchy, Markdown documentation, and graph connections.
 Prefer the MCP tools when available:
 
 - \`flow_status\` — linked project and counts.
-- \`flow_list_nodes\` — stable external keys, paths, types.
-- \`flow_get_node\` — full Markdown and connections for one node.
+- \`flow_list_nodes\` — stable node ids, external keys, paths, types.
+- \`flow_get_node\` — fetch one node by \`nodeId\` (the id shown on its card) or
+  external \`key\`, with full Markdown and connections.
 - \`flow_apply_plan\` — atomic, validated batch apply (dryRun defaults to true).
+  Its result includes \`createdNodes\` (\`key\`, \`title\`, \`nodeId\`) so follow-up
+  reads can use the stable id of every node the plan created.
 
 Without MCP, use the CLI: \`flow status\`, \`flow list --json\`,
-\`flow get <key> --json\`, \`flow apply plan.json --dry-run\`, then
+\`flow get <key|id> --json\`, \`flow apply plan.json --dry-run\`, then
 \`flow apply plan.json\`.
+
+Every node has a stable id. It is visible on the node card and in node
+details; click it to copy. Use that id for exact reads with
+\`flow_get_node\` (\`{ "nodeId": "n_..." }\`) or \`flow get <id> --json\`.
 
 ## Workflow
 
@@ -97,6 +104,25 @@ Without MCP, use the CLI: \`flow status\`, \`flow list --json\`,
 - Connection types: ${CONNECTION_TYPE_NAMES.join(', ')}.
 - Parents may be external keys, node ids, or \`@root\` (project root).
 - Every operation must reference a node that exists or is created by the same plan.
+
+## Source links
+
+When a node's Markdown quotes repository code, annotate the fence with the
+repository-relative path and line range:
+
+\`\`\`ts file=src/auth/session.ts lines=24-38
+const session = createSession(user);
+\`\`\`
+
+Flow renders the header as a link: clicking it opens the file in VS Code and
+selects those lines. Keep paths relative to the workspace root and ranges
+accurate. Also list the same files in the operation or plan \`sourceFiles\` so
+the node's details panel shows its sources:
+
+\`\`\`json
+{ "op": "upsert-node", "key": "module/auth", "type": "module", "title": "Auth",
+  "sourceFiles": ["src/auth/session.ts"], "markdown": "..." }
+\`\`\`
 
 ## Safety
 

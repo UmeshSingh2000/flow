@@ -5,10 +5,12 @@
  */
 export * from '../../src/core/operations';
 export { computeAutoLayout } from '../../src/core/layout';
+export { parseSourceFence } from '../../src/core/sourceFence';
 export {
   createConnection,
   createNodeRecord,
   createProject,
+  deleteNode,
   duplicateNode,
   getNode,
   getRootNode,

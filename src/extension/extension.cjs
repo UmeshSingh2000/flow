@@ -49,7 +49,10 @@ function activate(context) {
 
   // If the user already installed the terminal CLI, keep its stable copy in
   // sync with this extension version. This never installs it implicitly.
-  installer.refreshCliTools({
+  // The MCP registration points at this stable copy, so a refreshed file is
+  // what Claude Code runs next session; the webview surfaces it when the
+  // version actually changed.
+  const cliRefresh = installer.refreshCliTools({
     extensionPath: context.extensionPath,
     appDataDir,
   });
@@ -87,6 +90,10 @@ function activate(context) {
               projectId: currentLinkedProjectId(),
               workspaceName,
             }
+          : null,
+      cliUpdate:
+        cliRefresh.updated && cliRefresh.toVersion
+          ? { version: cliRefresh.toVersion }
           : null,
     };
   }
@@ -141,6 +148,95 @@ function activate(context) {
 
     if (reveal) created.reveal();
     return created;
+  }
+
+  /**
+   * Open Flow's per-user application-data directory in the OS file manager.
+   * This directory holds workspace links, the command queue, and pre-apply
+   * backups; project documents themselves remain in the webview's IndexedDB.
+   */
+  async function openDataFolder() {
+    protocol.ensurePrivateDir(appDataDir);
+    const uri = vscode.Uri.file(appDataDir);
+    const opened = await vscode.env.openExternal(uri);
+    if (!opened) {
+      await vscode.commands.executeCommand('revealFileInOS', uri);
+    }
+  }
+
+  function clampLine(value, lineCount) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    return Math.min(Math.max(1, Math.floor(value)), lineCount);
+  }
+
+  /**
+   * Open a repository-relative source file in the editor and select a 1-based
+   * line range. Paths are workspace-scoped so Markdown cannot open arbitrary
+   * files on the machine.
+   */
+  async function openSourceFile(sourcePath, startLine, endLine) {
+    if (typeof sourcePath !== 'string') {
+      return { ok: false, error: 'Invalid source path.' };
+    }
+    const relative = sourcePath.trim();
+    if (!relative || relative.length > 500) {
+      return { ok: false, error: 'Invalid source path.' };
+    }
+    if (!workspacePath) {
+      return {
+        ok: false,
+        error: 'Open a folder in VS Code before opening source files.',
+      };
+    }
+    let workspaceRoot;
+    try {
+      workspaceRoot = protocol.normalizeWorkspace(workspacePath);
+    } catch {
+      workspaceRoot = workspacePath;
+    }
+    const resolved = path.resolve(workspaceRoot, relative);
+    // Resolve symlinks before the boundary check so a link inside the
+    // workspace cannot point the editor at an outside file.
+    let target = resolved;
+    try {
+      target = fs.realpathSync(resolved);
+    } catch {
+      /* The open call below reports a missing file. */
+    }
+    if (!protocol.isInsideWorkspace(workspaceRoot, target)) {
+      return {
+        ok: false,
+        error: `Flow will not open "${relative}" because it is outside the workspace.`,
+      };
+    }
+    const uri = vscode.Uri.file(target);
+
+    let document;
+    try {
+      document = await vscode.workspace.openTextDocument(uri);
+    } catch (error) {
+      return { ok: false, error: `Could not open ${relative}: ${errorText(error)}` };
+    }
+
+    const showOptions = {
+      viewColumn: vscode.ViewColumn.Active,
+      preview: false,
+    };
+    if (typeof startLine === 'number' && Number.isFinite(startLine)) {
+      const lines = Math.max(1, document.lineCount);
+      const start = clampLine(startLine, lines) ?? 1;
+      const end = Math.max(start, clampLine(endLine, lines) ?? start);
+      showOptions.selection = new vscode.Range(
+        new vscode.Position(start - 1, 0),
+        document.lineAt(end - 1).range.end,
+      );
+    }
+    try {
+      await vscode.window.showTextDocument(document, showOptions);
+    } catch (error) {
+      return { ok: false, error: `Could not show ${relative}: ${errorText(error)}` };
+    }
+    return { ok: true };
   }
 
   function waitForPanelReady(timeoutMs = PANEL_READY_TIMEOUT_MS) {
@@ -210,6 +306,35 @@ function activate(context) {
           // A reloaded webview must not leave an orphaned share running.
           await shareServer.stopByOwner(owner);
           return;
+
+        case 'flow:openDataFolder':
+          try {
+            await openDataFolder();
+          } catch (error) {
+            vscode.window.showErrorMessage(
+              `Could not open the Flow data folder: ${errorText(error)}`,
+            );
+          }
+          return;
+
+        case 'flow:openSourceFile': {
+          const requestId =
+            typeof message.requestId === 'string' ? message.requestId : '';
+          let result;
+          try {
+            result = await openSourceFile(
+              message.path,
+              message.startLine,
+              message.endLine,
+            );
+          } catch (error) {
+            result = { ok: false, error: errorText(error) };
+          }
+          if (requestId) {
+            post({ type: 'flow:openSourceResult', requestId, ...result });
+          }
+          return;
+        }
 
         case 'flow:commandsReady':
           if (owner !== panel) return;
@@ -646,6 +771,12 @@ function activate(context) {
       openFlowPanel();
       void offerSetup();
     }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('flow.openDataFolder', () =>
+      safeCommand(openDataFolder),
+    ),
   );
 
   context.subscriptions.push(

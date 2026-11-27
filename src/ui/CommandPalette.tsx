@@ -7,6 +7,7 @@ import { useGuideStore } from '../state/guideStore';
 import { useActiveProject, useFlowStore } from '../state/store';
 import type { MapView } from '../state/store';
 import { buildRows } from './views/rows';
+import { copyText } from './vscodeBridge';
 import {
   IconCopy,
   IconDownload,
@@ -380,6 +381,19 @@ export function CommandPalette() {
       keywords: 'type kind category node',
       icon: <IconSettings size={14} />,
       run: () => startStage({ kind: 'node-type', nodeId: selectedNode.id }),
+    });
+    push({
+      id: 'copy-node-id',
+      group: 'Edit',
+      title: 'Copy node ID',
+      hint: selectedNode.id,
+      keywords: 'copy id identifier uuid node',
+      icon: <IconCopy size={14} />,
+      run: () => {
+        closePalette();
+        void copyText(selectedNode.id);
+        notify('Node ID copied.');
+      },
     });
     push({
       id: 'edit-markdown',

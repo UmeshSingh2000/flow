@@ -1,6 +1,6 @@
 {
   "name": "flow-docs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "displayName": "Flow Docs - Visual Project Documentation",
   "publisher": "UmeshSingh",
@@ -24,6 +24,10 @@
       {
         "command": "flow.open",
         "title": "Flow: Open"
+      },
+      {
+        "command": "flow.openDataFolder",
+        "title": "Flow: Open Data Folder"
       },
       {
         "command": "flow.linkWorkspace",

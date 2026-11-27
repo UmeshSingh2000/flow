@@ -5,8 +5,12 @@ const assert = require('node:assert/strict');
 const {
   applyPlan,
   validateProjectIntegrity,
+  createConnection,
+  createNodeRecord,
   createProject,
+  deleteNode,
   duplicateNode,
+  getRootNode,
 } = require('../.test-build/core.cjs');
 
 const PROVENANCE = { tool: 'test', sourceFiles: ['src/auth/session.ts'] };
@@ -63,6 +67,34 @@ test('creates a hierarchy, documentation, and connections in one plan', () => {
   assert.equal(auth.provenance.tool, 'test');
   assert.equal(login.parentId, auth.id);
   assert.equal(result.project.connections.length, 1);
+});
+
+test('apply result returns the ids of created nodes', () => {
+  const project = baseProject();
+  const ops = [
+    { op: 'upsert-node', key: 'module/a', type: 'module', title: 'A', parent: '@root' },
+    {
+      op: 'upsert-node',
+      key: 'module/a/child',
+      type: 'feature',
+      title: 'Child',
+      parent: 'module/a',
+    },
+  ];
+  const result = applyPlan(project, plan(ops));
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.createdNodes.map((node) => node.key),
+    ['module/a', 'module/a/child'],
+  );
+  for (const created of result.createdNodes) {
+    assert.match(created.nodeId, /^n_/);
+    assert.ok(result.project.nodes.some((node) => node.id === created.nodeId));
+  }
+
+  const rerun = applyPlan(result.project, plan(ops));
+  assert.equal(rerun.ok, true);
+  assert.equal(rerun.createdNodes.length, 0);
 });
 
 test('re-running the same plan is idempotent', () => {
@@ -340,6 +372,42 @@ test('records per-operation provenance and leaves unchanged nodes alone', () => 
   assert.equal(second.ok, true);
   assert.equal(second.summary.unchanged, 1);
   assert.deepEqual(keyed(second.project, 'a').provenance.sourceFiles, ['src/a.ts']);
+});
+
+test('node deletion reports removed nodes and connections for undo', () => {
+  const base = createProject('Demo');
+  const root = getRootNode(base);
+  const parent = createNodeRecord({
+    projectId: base.id,
+    parentId: root.id,
+    type: 'module',
+    title: 'Parent',
+  });
+  const child = createNodeRecord({
+    projectId: base.id,
+    parentId: parent.id,
+    type: 'feature',
+    title: 'Child',
+  });
+  let project = { ...base, nodes: [...base.nodes, parent, child] };
+  const linked = createConnection(project, parent.id, root.id);
+  assert.equal(linked.ok, true);
+  project = linked.project;
+
+  const result = deleteNode(project, parent.id);
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    [...result.removedIds].sort(),
+    [parent.id, child.id].sort(),
+  );
+  assert.deepEqual(
+    result.removedNodes.map((node) => node.id).sort(),
+    [parent.id, child.id].sort(),
+  );
+  assert.equal(result.removedConnections.length, 1);
+  assert.equal(result.removedConnections[0].source, parent.id);
+  assert.equal(result.project.nodes.some((node) => node.id === parent.id), false);
+  assert.equal(result.project.connections.length, 0);
 });
 
 test('duplicating a generated node does not clone its external key', () => {

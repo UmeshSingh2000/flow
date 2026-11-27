@@ -7,10 +7,11 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
+  SelectionMode,
   useNodesInitialized,
   useReactFlow,
 } from '@xyflow/react';
-import type { Edge, EdgeTypes, NodeTypes } from '@xyflow/react';
+import type { Edge, EdgeTypes, NodeChange, NodeTypes } from '@xyflow/react';
 import { countLinks, NODE_CARD_WIDTH } from '../core/graph';
 import { CONNECTION_TYPE_LABELS, MAX_IMAGES_PER_NODE } from '../core/types';
 import { useShareStore } from '../state/shareStore';
@@ -24,13 +25,45 @@ import { facingHandles, NODE_COLORS } from './canvasPresentation';
 import { FlowConnectionEdge } from './FlowConnectionEdge';
 import { FlowNodeCard } from './FlowNodeCard';
 import type { FlowCanvasNode } from './FlowNodeCard';
-import { IconArrange, IconLink, IconPlus, IconUpload } from './icons';
+import { NodeContextMenu } from './NodeContextMenu';
+import {
+  IconArrange,
+  IconCursor,
+  IconHand,
+  IconLink,
+  IconPlus,
+  IconUpload,
+  IconZoom,
+} from './icons';
 
 const MAP_VIEWS: { id: MapView; label: string }[] = [
   { id: 'canvas', label: 'Canvas' },
   { id: 'table', label: 'Table' },
   { id: 'board', label: 'Board' },
   { id: 'docs', label: 'Docs' },
+];
+
+type CanvasTool = 'select' | 'pan' | 'zoom';
+
+const CANVAS_TOOLS = [
+  {
+    id: 'select' as const,
+    label: 'Select',
+    hint: 'Click a node, or drag on empty canvas to select several. (V)',
+    Icon: IconCursor,
+  },
+  {
+    id: 'pan' as const,
+    label: 'Pan',
+    hint: 'Drag to move around the canvas. (H)',
+    Icon: IconHand,
+  },
+  {
+    id: 'zoom' as const,
+    label: 'Zoom',
+    hint: 'Click to zoom in, Alt-click to zoom out. (Z)',
+    Icon: IconZoom,
+  },
 ];
 
 const nodeTypes = { flow: FlowNodeCard } as unknown as NodeTypes;
@@ -86,11 +119,99 @@ export function CanvasArea() {
   );
   const openShareDialog = useShareStore((state) => state.openDialog);
 
-  const { setCenter, screenToFlowPosition, getNodes, fitView } = useReactFlow();
+  const { setCenter, setViewport, getViewport, screenToFlowPosition, getNodes, fitView } =
+    useReactFlow();
   const lastFocusNonce = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dropActive, setDropActive] = useState(false);
   const dragDepth = useRef(0);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+
+  const [tool, setTool] = useState<CanvasTool>('pan');
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [nodeMenu, setNodeMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
+    null,
+  );
+  // React Flow reports selection changes that we must apply ourselves because
+  // the nodes prop is controlled. A ref mirrors the state so a batch of
+  // changes can be resolved synchronously without stale reads.
+  const selectedIdsRef = useRef<Set<string>>(new Set());
+
+  const applySelection = (next: Set<string>) => {
+    selectedIdsRef.current = next;
+    setSelectedIds(next);
+  };
+
+  // Tree, properties panel and command palette select a single node through the
+  // store. Mirror that on the canvas unless the node is already part of a
+  // multi-selection.
+  useEffect(() => {
+    const current = selectedIdsRef.current;
+    if (selectedNodeId === null) {
+      if (current.size > 0) applySelection(new Set());
+      return;
+    }
+    if (!current.has(selectedNodeId)) applySelection(new Set([selectedNodeId]));
+  }, [selectedNodeId]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key !== 'v' && key !== 'h' && key !== 'z') return;
+      event.preventDefault();
+      setTool(key === 'v' ? 'select' : key === 'h' ? 'pan' : 'zoom');
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const zoomAt = (clientX: number, clientY: number, direction: 1 | -1) => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    const { zoom } = getViewport();
+    const nextZoom = Math.min(1.75, Math.max(0.25, zoom * (direction > 0 ? 1.25 : 0.8)));
+    if (Math.abs(nextZoom - zoom) < 0.001) return;
+    const point = screenToFlowPosition({ x: clientX, y: clientY });
+    const rect = surface.getBoundingClientRect();
+    setViewport(
+      {
+        x: clientX - rect.left - point.x * nextZoom,
+        y: clientY - rect.top - point.y * nextZoom,
+        zoom: nextZoom,
+      },
+      { duration: 140 },
+    );
+  };
+
+  const handleSelectionChanges = (changes: Iterable<NodeChange>) => {
+    const selectChanges = Array.from(changes).filter(
+      (change): change is Extract<NodeChange, { type: 'select' }> =>
+        change.type === 'select',
+    );
+    if (selectChanges.length === 0) return;
+
+    const next = new Set(selectedIdsRef.current);
+    for (const change of selectChanges) {
+      if (change.selected) next.add(change.id);
+      else next.delete(change.id);
+    }
+    applySelection(next);
+
+    const primary = selectChanges.filter((change) => change.selected).at(-1)?.id ?? null;
+    if (primary) {
+      if (useFlowStore.getState().selectedNodeId !== primary) selectNode(primary);
+    } else if (next.size === 0 && useFlowStore.getState().selectedNodeId !== null) {
+      selectNode(null);
+    }
+  };
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -163,11 +284,11 @@ export function CanvasArea() {
       type: 'flow' as const,
       position: node.position,
       data: { node },
-      selected: node.id === selectedNodeId,
+      selected: selectedIds.has(node.id),
       // Node deletion is confirmed through the dialog, never by a stray key.
       deletable: false,
     }));
-  }, [project, selectedNodeId]);
+  }, [project, selectedIds]);
 
   const edges = useMemo<Edge[]>(() => {
     if (!project) return [];
@@ -340,7 +461,8 @@ export function CanvasArea() {
 
       {view === 'canvas' && (
       <div
-        className={`canvas-surface${dropActive ? ' is-drop-target' : ''}`}
+        ref={surfaceRef}
+        className={`canvas-surface tool-${tool}${dropActive ? ' is-drop-target' : ''}`}
         data-guide="canvas"
         onDragEnter={(event) => {
           if (!event.dataTransfer?.types.includes('Files')) return;
@@ -364,6 +486,21 @@ export function CanvasArea() {
             <span>Drop onto a node to attach, or on empty canvas to create one</span>
           </div>
         )}
+        <div className="canvas-toolbar" role="toolbar" aria-label="Canvas tools">
+          {CANVAS_TOOLS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`canvas-tool${tool === entry.id ? ' is-active' : ''}`}
+              aria-pressed={tool === entry.id}
+              aria-label={entry.label}
+              title={`${entry.label} — ${entry.hint}`}
+              onClick={() => setTool(entry.id)}
+            >
+              <entry.Icon size={15} />
+            </button>
+          ))}
+        </div>
         <ReactFlow
           key={project.id}
           nodes={nodes}
@@ -371,6 +508,7 @@ export function CanvasArea() {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodesChange={(changes) => {
+            handleSelectionChanges(changes);
             for (const change of changes) {
               if (change.type === 'position' && change.position) {
                 if (change.dragging) {
@@ -384,8 +522,18 @@ export function CanvasArea() {
           onNodeDragStop={(_event, node) => {
             commitNodePosition(node.id, node.position);
           }}
-          onNodeClick={(_event, node) => {
+          onNodeClick={(event, node) => {
+            if (tool === 'zoom') {
+              zoomAt(event.clientX, event.clientY, event.altKey ? -1 : 1);
+              return;
+            }
             selectNode(node.id);
+          }}
+          onNodeContextMenu={(event, node) => {
+            event.preventDefault();
+            applySelection(new Set([node.id]));
+            selectNode(node.id);
+            setNodeMenu({ nodeId: node.id, x: event.clientX, y: event.clientY });
           }}
           onEdgeClick={(_event, edge) => {
             if (edge.id.startsWith('c-')) selectConnection(edge.id.slice(2));
@@ -406,7 +554,13 @@ export function CanvasArea() {
               if (edge.id.startsWith('c-')) deleteConnection(edge.id.slice(2));
             }
           }}
-          onPaneClick={() => selectNode(null)}
+          onPaneClick={(event) => {
+            if (tool === 'zoom') {
+              zoomAt(event.clientX, event.clientY, event.altKey ? -1 : 1);
+              return;
+            }
+            selectNode(null);
+          }}
           onConnect={(connection) => {
             if (!connection.source || !connection.target) return;
             connect(connection.source, connection.target);
@@ -440,6 +594,15 @@ export function CanvasArea() {
           fitViewOptions={{ padding: 32, maxZoom: 1, minZoom: 0.25 }}
           minZoom={0.25}
           maxZoom={1.75}
+          // Select: left-drag draws a selection box, middle/right button pans.
+          // Pan: left-drag moves the viewport, while dragging a node still moves
+          // the node. Zoom: clicks zoom at the cursor.
+          panOnDrag={tool === 'pan' ? true : tool === 'select' ? [1, 2] : false}
+          selectionOnDrag={tool === 'select'}
+          selectionMode={SelectionMode.Partial}
+          multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
+          nodesDraggable={tool !== 'zoom'}
+          elementsSelectable={tool !== 'zoom'}
           deleteKeyCode={['Delete', 'Backspace']}
           defaultEdgeOptions={{ type: 'default' }}
           connectionLineType={ConnectionLineType.Bezier}
@@ -471,6 +634,14 @@ export function CanvasArea() {
             }}
           />
         </ReactFlow>
+        {nodeMenu && (
+          <NodeContextMenu
+            nodeId={nodeMenu.nodeId}
+            x={nodeMenu.x}
+            y={nodeMenu.y}
+            onClose={() => setNodeMenu(null)}
+          />
+        )}
       </div>
       )}
     </main>

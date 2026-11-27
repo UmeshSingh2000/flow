@@ -162,19 +162,6 @@ export function notifyAppReady(): void {
   getVsCodeApi()?.postMessage({ type: 'flow:appReady' });
 }
 
-export async function copyText(text: string): Promise<void> {
-  const api = getVsCodeApi();
-  if (api) {
-    api.postMessage({ type: 'flow:copyText', text });
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    /* Clipboard access was denied; the value stays selectable in the dialog. */
-  }
-}
-
 export function onShareEvent(handler: (event: ShareEvent) => void): () => void {
   ensureListener();
   eventHandlers.add(handler);

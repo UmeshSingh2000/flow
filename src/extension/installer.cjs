@@ -173,13 +173,31 @@ function copyCliTools({ extensionPath, appDataDir, version }) {
   return { toolsDir: tools, cliPath: cliEntryPath(appDataDir) };
 }
 
+/** Version recorded in the stable CLI copy, or null when unreadable. */
+function readToolsVersion(appDataDir) {
+  try {
+    const raw = fs.readFileSync(path.join(toolsDir(appDataDir), 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return typeof parsed.version === 'string' && parsed.version ? parsed.version : null;
+  } catch {
+    return null;
+  }
+}
+
 function refreshCliTools({ extensionPath, appDataDir, version } = {}) {
   if (!appDataDir || !fs.existsSync(cliEntryPath(appDataDir))) {
     return { refreshed: false, reason: 'not-installed' };
   }
+  const toVersion = version || readVersion(extensionPath);
+  const fromVersion = readToolsVersion(appDataDir);
   try {
-    copyCliTools({ extensionPath, appDataDir, version });
-    return { refreshed: true };
+    copyCliTools({ extensionPath, appDataDir, version: toVersion });
+    return {
+      refreshed: true,
+      updated: fromVersion !== toVersion,
+      fromVersion: fromVersion || null,
+      toVersion,
+    };
   } catch (error) {
     return { refreshed: false, reason: error.message };
   }

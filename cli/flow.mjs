@@ -354,7 +354,8 @@ function printApply(result) {
     const mark =
       change.action === 'created' ? '+' : change.action === 'updated' ? '~' : '=';
     const label = change.key || change.title || change.nodeId || '';
-    process.stdout.write(`  ${mark} ${change.operation} ${label}\n`);
+    const id = change.action === 'created' && change.nodeId ? `  (${change.nodeId})` : '';
+    process.stdout.write(`  ${mark} ${change.operation} ${label}${id}\n`);
   }
   if (result.backupPath) {
     process.stdout.write(`backup: ${result.backupPath}\n`);
@@ -433,7 +434,14 @@ const PLAN_OP_SCHEMA = {
       description: 'Parent external key, node id, "@root", or null for top level.',
     },
     description: { type: 'string' },
-    markdown: { type: 'string' },
+    markdown: {
+      type: 'string',
+      description:
+        'Markdown documentation. When a code fence quotes repository code, annotate it with ' +
+        'file=<workspace-relative path> lines=<start>-<end>, for example ' +
+        '```ts file=src/auth/session.ts lines=24-38. Flow renders that header as a link that ' +
+        'opens the file in VS Code and selects the range.',
+    },
     details: {
       type: 'object',
       description:
@@ -446,7 +454,12 @@ const PLAN_OP_SCHEMA = {
     source: { type: 'string', description: 'Connect: source key or node id.' },
     target: { type: 'string', description: 'Connect: target key or node id.' },
     label: { type: 'string' },
-    sourceFiles: { type: 'array', items: { type: 'string' } },
+    sourceFiles: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Workspace-relative source files backing this node; Flow lists them as openable links.',
+    },
   },
   required: ['op'],
 };
@@ -461,7 +474,7 @@ const MCP_TOOLS = [
   {
     name: 'flow_list_nodes',
     description:
-      'List the nodes (documentation map) of the active Flow project, with stable external keys and paths.',
+      'List the nodes (documentation map) of the active Flow project, with stable node ids, external keys, and paths.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -474,11 +487,20 @@ const MCP_TOOLS = [
   {
     name: 'flow_get_node',
     description:
-      'Read one Flow node by external key (or node id), including Markdown and connections.',
+      'Read one Flow node by stable node id or external key, including Markdown and connections. ' +
+      'Provide either "nodeId" or "key". The canvas, node details, and flow_list_nodes all show the node id.',
     inputSchema: {
       type: 'object',
-      properties: { key: { type: 'string' } },
-      required: ['key'],
+      properties: {
+        nodeId: {
+          type: 'string',
+          description: 'Stable node id such as "n_..." shown on the node card and in node details.',
+        },
+        key: {
+          type: 'string',
+          description: 'Stable external key such as "module/auth".',
+        },
+      },
       additionalProperties: false,
     },
   },
@@ -486,7 +508,8 @@ const MCP_TOOLS = [
     name: 'flow_apply_plan',
     description:
       'Validate and apply a batch of documentation operations to the active Flow project. ' +
-      'Use dryRun (the default) first. Operations are atomic and idempotent: upsert-node by external key.',
+      'Use dryRun (the default) first. Operations are atomic and idempotent: upsert-node by external key. ' +
+      'The result includes createdNodes with the stable node id assigned to each node the plan created.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -536,10 +559,12 @@ async function runMcp(workspace) {
       );
     }
     if (name === 'flow_get_node') {
-      if (typeof args.key !== 'string' || !args.key) {
-        throw new Error('flow_get_node needs a "key".');
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId.trim() : '';
+      const key = typeof args.key === 'string' ? args.key.trim() : '';
+      if (!nodeId && !key) {
+        throw new Error('flow_get_node needs a "nodeId" or "key".');
       }
-      return call('get', { ref: args.key }, { workspace });
+      return call('get', nodeId ? { nodeId } : { ref: key }, { workspace });
     }
     if (name === 'flow_apply_plan') {
       if (!Array.isArray(args.ops) || args.ops.length === 0) {

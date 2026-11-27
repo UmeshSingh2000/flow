@@ -130,3 +130,31 @@ test('mcp responds to initialize over stdio', () => {
   assert.equal(response.result.serverInfo.name, 'flow');
   assert.ok(response.result.capabilities.tools);
 });
+
+test('mcp exposes node lookup by stable node id', () => {
+  const result = run(['mcp'], {
+    cwd: REPO_ROOT,
+    input:
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '0' },
+        },
+      })}\n` +
+      `${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' })}\n`,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const lines = result.stdout.trim().split('\n').filter(Boolean);
+  const response = JSON.parse(lines.find((line) => JSON.parse(line).id === 2));
+  assert.equal(response.result.tools.length, 4);
+  const tool = response.result.tools.find((entry) => entry.name === 'flow_get_node');
+  assert.ok(tool);
+  assert.ok(tool.inputSchema.properties.nodeId);
+  assert.ok(tool.inputSchema.properties.key);
+  assert.match(tool.description, /nodeId/i);
+  assert.match(tool.description, /key/i);
+});

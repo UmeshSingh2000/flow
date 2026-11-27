@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useShareStore } from '../state/shareStore';
 import { useActiveProject } from '../state/store';
-import { copyText } from './shareBridge';
+import { copyText } from './vscodeBridge';
 import { IconLink, IconX } from './icons';
 
 function formatExpiry(value: string): string {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGuideStore } from '../state/guideStore';
 import { useShareStore } from '../state/shareStore';
 import { useActiveProject, useFlowStore } from '../state/store';
@@ -6,6 +6,7 @@ import { ProjectTree } from './ProjectTree';
 import { StorageStatus } from './StorageStatus';
 import {
   IconDownload,
+  IconFolder,
   IconHelp,
   IconLink,
   IconMore,
@@ -18,6 +19,16 @@ import {
   IconUpload,
   IconX,
 } from './icons';
+import { isVsCodeWebview, openDataFolder } from './vscodeBridge';
+
+function formatStorageSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
+}
 
 export function Sidebar() {
   const projects = useFlowStore((state) => state.projects);
@@ -34,12 +45,45 @@ export function Sidebar() {
   const toggleSidebar = useFlowStore((state) => state.toggleSidebar);
   const theme = useFlowStore((state) => state.theme);
   const setTheme = useFlowStore((state) => state.setTheme);
+  const cliUpdateVersion = useFlowStore((state) => state.cliUpdateVersion);
+  const dismissCliUpdate = useFlowStore((state) => state.dismissCliUpdate);
   const openShareDialog = useShareStore((state) => state.openDialog);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tourCompleted = useGuideStore((state) => state.completed);
+  const inVsCode = isVsCodeWebview();
+
+  // Serialized size of the records Flow keeps in IndexedDB. Computed lazily
+  // while Settings is open so editing never pays for it.
+  const projectDataSize = useMemo(
+    () => (settingsOpen ? new TextEncoder().encode(JSON.stringify(projects)).length : null),
+    [settingsOpen, projects],
+  );
+  // Whole-origin estimate (database overhead plus cached assets), when the
+  // host exposes the Storage API.
+  const [storageUsage, setStorageUsage] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const storage = navigator.storage;
+    if (!storage || typeof storage.estimate !== 'function') return;
+    let cancelled = false;
+    void storage.estimate().then(
+      (estimate) => {
+        if (!cancelled) {
+          setStorageUsage(typeof estimate.usage === 'number' ? estimate.usage : null);
+        }
+      },
+      () => {
+        if (!cancelled) setStorageUsage(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen]);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -224,8 +268,8 @@ export function Sidebar() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search nodes…"
-              aria-label="Search nodes by title or description"
+              placeholder="Search title, description, or ID…"
+              aria-label="Search nodes by title, description, or node ID"
             />
             {search && (
               <button
@@ -244,6 +288,22 @@ export function Sidebar() {
 
       <footer className="sidebar-footer">
         {storageWarning && <p className="storage-warning">{storageWarning}</p>}
+        {cliUpdateVersion && (
+          <div className="update-note" role="status">
+            <p>
+              Flow terminal tools updated to {cliUpdateVersion}. Restart Claude Code
+              to load the updated MCP tools.
+            </p>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Dismiss update note"
+              onClick={dismissCliUpdate}
+            >
+              <IconX size={11} />
+            </button>
+          </div>
+        )}
         <StorageStatus />
         <div className="menu-anchor settings-anchor">
           <button
@@ -302,6 +362,44 @@ export function Sidebar() {
                     <IconHelp size={13} />
                     {tourCompleted ? 'Replay the tour' : 'Start the tour'}
                   </button>
+                </div>
+                <hr />
+                <div className="menu-section">
+                  <span className="eyebrow">DATA</span>
+                  {(storageUsage ?? projectDataSize) !== null && (
+                    <p
+                      className="storage-figure"
+                      title="Estimated total storage Flow uses on this device."
+                    >
+                      <span>Storage used</span>
+                      <strong className="storage-figure-value">
+                        {formatStorageSize(storageUsage ?? projectDataSize ?? 0)}
+                      </strong>
+                    </p>
+                  )}
+                  {inVsCode ? (
+                    <>
+                      <p className="menu-hint">
+                        Opens Flow&apos;s application-data folder: workspace links,
+                        queued commands, and pre-apply backups.
+                      </p>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          openDataFolder();
+                          setSettingsOpen(false);
+                        }}
+                      >
+                        <IconFolder size={13} /> Open data folder
+                      </button>
+                    </>
+                  ) : (
+                    <p className="menu-hint">
+                      Projects are stored in this browser&apos;s local database.
+                      Use Export to save a portable copy.
+                    </p>
+                  )}
                 </div>
                 <hr />
                 <button

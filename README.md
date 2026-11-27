@@ -8,6 +8,11 @@ data.
 Flow runs as a web app and as a Visual Studio Code extension. It starts empty: create
 a project or import a backup to get started.
 
+[![Try the live web app](https://img.shields.io/badge/%E2%96%B6_Try_the_live_web_app-2563eb?style=for-the-badge)](https://flow-blush-two.vercel.app/)
+
+**Live demo:** <https://flow-blush-two.vercel.app/> — no install or account required.
+Projects are stored locally in your browser.
+
 ## Run the web app
 
 ```bash
@@ -69,6 +74,15 @@ Support/flow` on macOS, `%LOCALAPPDATA%\flow` on Windows).
 Rebuild and reinstall the extension (`npm run package`) before using the CLI so the
 extension host includes the command channel.
 
+### Updating the CLI and MCP tools
+
+The MCP registration points at the stable CLI copy in Flow's app-data directory, not
+at the extension bundle. When a new extension version activates, the host refreshes
+that copy automatically — users never re-run `claude mcp add` after an update. Flow
+shows a notice at the bottom of the sidebar when the tools changed; the only manual
+step is restarting Claude Code, because an already-running MCP session keeps the old
+code in memory. The notice lists the new version and can be dismissed.
+
 ### One-click setup
 
 After installing the extension, open the Command Palette and run
@@ -122,8 +136,9 @@ workspace path. It is per user and per machine, and it never touches the reposit
 
 ```bash
 flow status                         # linked project, counts, storage state
-flow list --type module             # tree of nodes with external keys
+flow list --type module             # tree of nodes with external keys and ids
 flow get module/auth --json         # one node with Markdown and connections
+flow get n_0123abcd-... --json      # the same lookup by stable node id
 flow apply plan.json --dry-run      # validate and preview a batch
 flow apply plan.json                # apply atomically
 flow open                           # open/reveal the Flow panel
@@ -189,7 +204,31 @@ flow install-skill
 ```
 
 The server exposes `flow_status`, `flow_list_nodes`, `flow_get_node`, and
-`flow_apply_plan` (dry-run by default) over stdio.
+`flow_apply_plan` (dry-run by default) over stdio. An apply response includes
+`createdNodes` with the stable `nodeId` of every node the plan created, so an agent
+can immediately read or reference new nodes by id. `flow_get_node` accepts either
+`nodeId` (the stable id shown on every node card) or an external `key`:
+
+```json
+{ "nodeId": "n_0123abcd-..." }
+```
+
+Click a node's id on the canvas or copy it from **Properties → Node ID**; node ids
+also appear in `flow list --json` and the MCP list response.
+
+When MCP-generated Markdown quotes repository code, annotate the code fence with the
+file and line range:
+
+````markdown
+```ts file=src/auth/session.ts lines=24-38
+const session = createSession(user);
+```
+````
+
+The Markdown preview shows the path and range as a link. Clicking it opens the file in
+VS Code and selects those lines. Files listed in the plan's `sourceFiles` appear under
+**Properties → Source files** with the same behavior. Paths are resolved inside the
+linked workspace, so Markdown cannot open files outside it.
 
 Restart Claude Code after registration. Run `/mcp` to confirm the `flow` server
 is connected and `/flow-help` to list the terminal commands.
@@ -210,8 +249,8 @@ is connected and `/flow-help` to list the terminal commands.
 | Area | Features |
 |---|---|
 | Projects | Create, rename, switch, and delete projects; project deletion requires confirmation. Each project has a protected root node and optional description. |
-| Nodes and hierarchy | Create nodes at the root or as children, edit their title/type/description, drag them on the canvas, duplicate them, and re-parent them. Nest to any depth; the tree supports expand/collapse and search. Deletion explains descendant handling and requires confirmation. |
-| Documentation | Eight structured fields (purpose, inputs, outputs, preconditions, behavior, success/failure result, notes), a description, and per-node Markdown with a rendered preview and full-screen Write/Preview editor. |
+| Nodes and hierarchy | Create nodes at the root or as children, edit their title/type/description, drag them on the canvas, duplicate them, and re-parent them. Every node shows its stable ID on the card and in Properties; click or copy it to use with the CLI/MCP. Nest to any depth; the tree supports expand/collapse and search by title, description, or node ID. Deletion explains descendant handling and requires confirmation; deleted nodes, connections, and projects can be undone for 10 seconds from the toast. |
+| Documentation | Eight structured fields (purpose, inputs, outputs, preconditions, behavior, success/failure result, notes), a description, and per-node Markdown with a rendered preview and full-screen Write/Preview editor. Code fences annotated with a repository file and line range become links that open the file in VS Code and select those lines. |
 | Images | Attach up to six images to a node through the properties panel or by dropping files on a node. Dropping onto empty canvas creates a node named after the image. Cards show thumbnails; select one to open the full-screen viewer. |
 | Connections | Connect any two nodes—including across branches—by dragging between handles. Drop a connector on empty canvas to create a connected node. Connections can have a relationship type and label; select or hover one to remove it. Self-connections and duplicate connections of the same type are rejected. |
 | Views | Switch between the interactive **Canvas**, sortable **Table**, type-grouped **Board**, and Markdown-focused **Docs** views. Selecting nodes is synchronized; double-click an item in Table, Board, or Docs to locate it on the canvas. |
@@ -263,6 +302,14 @@ stores). Saves are debounced by 400 ms and flushed when the page is hidden or cl
 The status indicator reports **Saving...**, **Saved on this device**, or **Save failed**.
 If IndexedDB is unavailable, Flow uses a visibly marked in-memory fallback; data in
 that fallback is not persistent, so export a backup before closing the app.
+
+In the VS Code extension, **Settings → Open data folder** (or **Flow: Open Data
+Folder** in the Command Palette) opens Flow's application-data directory in the OS file
+manager. That directory holds workspace links, queued terminal commands, and pre-apply
+backups. Project documents themselves remain in the editor's webview IndexedDB, so use
+**Export all projects** for a portable copy. A browser cannot open its IndexedDB
+storage folder; the web app explains this in Settings and offers the same export.
+**Settings → DATA** also reports the estimated total storage Flow uses on the device.
 
 Backups are versioned JSON and can contain one project or the whole workspace. Import
 validates the file before applying it and reports malformed JSON, unsupported versions,
